@@ -24,7 +24,7 @@ Hosted at `https://ugurkc.github.io/root-access` (GitHub Pages from `main`).
 | Session target | 30–60 min to afford everything (~level 25 each). One cost multiplier (×1.15). |
 | Equipment | Each item has one job: tap power *or* idle income; repeat purchases. |
 | Feel | Floating +$ pops, button squash + light shake, synthesized sounds (mutable). Short suffixes ($1.2K). |
-| Look | Dark pixel-art direction: CRT-black palette, phosphor green/amber accents, pixel font, chunky 2px borders, a stylised desk scene that gains gear as items are bought. Placeholder art, not final. |
+| Look | Dark pixel-art direction: black with a faint red cast, neon red for action (tap axis, money, hack button), shades of dark neon blue for systems (idle axis, screens, timers, collect), pixel font, chunky 2px borders, a stylised desk scene that gains gear as items are bought. Placeholder art, not final. |
 | Feedback | Talk to testers; no telemetry. |
 
 ## Variant semantics
