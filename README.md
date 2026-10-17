@@ -22,7 +22,7 @@ that choice; **SND** mutes.
 The room is a top-down isometric floor plan. You start in the centre square,
 a furnished hacker bedroom (desk, bed, shelf, plants, a window glowing red);
 the eight neighbours are dark until you buy **Expand** in the shop (each room
-costs 3x the last). Rooms are 6x6 tiles; furniture reserves 15 tiles in the
+costs 3x the last). Rooms are 6x6 tiles; furniture reserves 16 tiles in the
 start room (`rooms.furnitureTiles`). Every equipment level takes floor tiles
 (`footprint` in `config.js`), so a full house blocks upgrades with **NO
 SPACE** until you expand. Drag or swipe the panel to look around.
