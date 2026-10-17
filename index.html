@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#090609">
+<meta name="theme-color" content="#0a0708">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Root Access</title>
@@ -13,21 +13,22 @@
   /* Layout: one phone column. Tabs pinned on top, money + room, big tap
      zone, shop list below. Dark CRT pixel look; single theme by design. */
   :root {
-    /* Red = action (tap axis, money, hack button). Blue = systems (idle
-       axis, screens, timers, collect). Black with a faint red cast. */
-    --bg: #090609;
-    --panel: #130b10;
-    --panel-2: #1a1017;
-    --border: #381620;
-    --fg: #ead6dc;
-    --dim: #8a6a74;
-    --red: #ff2e4d;
+    /* Red neon = action (tap axis, money, hack button). Cyan screens =
+       systems (idle axis, timers, collect, levels). Warm plaster browns
+       for panels and borders, like the room's walls. */
+    --bg: #0a0708;
+    --panel: #15100f;
+    --panel-2: #1d1614;
+    --border: #3a2a24;
+    --fg: #ead9cf;
+    --dim: #8a7468;
+    --red: #ff3344;
     --red-dim: #7a1228;
-    --red-glow: rgba(255, 46, 77, .45);
-    --blue: #4f8dff;
-    --blue-dim: #1e3f99;
-    --blue-deep: #0b1636;
-    --blue-glow: rgba(79, 141, 255, .5);
+    --red-glow: rgba(255, 51, 68, .45);
+    --blue: #35e0dc;
+    --blue-dim: #136b69;
+    --blue-deep: #0b2a2c;
+    --blue-glow: rgba(53, 224, 220, .45);
     --font-display: 'Press Start 2P', 'Courier New', monospace;
     --font-body: 'VT323', 'Courier New', monospace;
     color-scheme: dark;
@@ -128,14 +129,14 @@
   .room {
     position: relative;
     border: 2px solid var(--border);
-    background: #05040a;
+    background: #07050a;
     height: 304px; max-width: 100%;
     overflow: hidden;
   }
   .roomScroll { overflow: auto; height: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none; cursor: grab; }
   .roomScroll.dragging { cursor: grabbing; }
   .roomScroll::-webkit-scrollbar { display: none; }
-  .room canvas { width: 768px; height: 432px; display: block; image-rendering: pixelated; }
+  .room canvas { width: 912px; height: 612px; display: block; image-rendering: pixelated; }
   .roomLabel {
     position: absolute; left: 8px; top: 6px; pointer-events: none;
     font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; color: var(--dim);
@@ -257,7 +258,7 @@
   </section>
 
   <section class="room">
-    <div class="roomScroll" id="roomScroll"><canvas id="room" width="256" height="144"></canvas></div>
+    <div class="roomScroll" id="roomScroll"><canvas id="room" width="304" height="204"></canvas></div>
     <div class="roomLabel" id="roomLabel"></div>
   </section>
 
@@ -309,7 +310,7 @@
   // Room [rx, ry] covers world tiles [rx*SIDE, rx*SIDE+SIDE). Equipment is
   // placed row by row into lit rooms, in purchase order of rooms.
   const SIDE = C.rooms.tilesPerSide, ROOM_TILES = SIDE * SIDE, maxRooms = 1 + C.rooms.order.length;
-  const reserved = new Set(C.rooms.deskTiles.map(([x, y]) => `${x},${y}`));
+  const reserved = new Set(C.rooms.furnitureTiles.map(([x, y]) => `${x},${y}`));
   const roomList = (s) => [[0, 0], ...C.rooms.order.slice(0, (s.rooms || 1) - 1)];
   const isLit = (s, rx, ry) => roomList(s).some(([a, b]) => a === rx && b === ry);
   const roomCost = (rooms) => Math.floor(C.rooms.baseCost * Math.pow(C.rooms.costGrowth, rooms - 1));
@@ -528,18 +529,32 @@
   const renderAll = () => { renderTabs(); renderMoney(); renderHack(); renderShop(); drawRoom(); };
 
   // ---------- house: isometric floor plan (placeholder pixel art) ----------
-  // Logical canvas 256x144 shown at 3x. A tile is a 16x8 diamond; world tile
-  // (0,0) is the back corner of the start room. Camera looks from the south,
-  // so the player (facing the desk to the north) shows us their back.
+  // Logical canvas 304x204 shown at 3x. A tile is a 16x8 diamond; world tile
+  // (0,0) is the back corner of the start room. The camera looks from the
+  // south: the two back walls stand tall, the player faces the desk and shows
+  // us their back. Look: a cluttered hacker bedroom, warm plaster and worn
+  // tile, cyan screens, red neon through the blinds.
   const ctx = $('room').getContext('2d');
-  const CW = 256, CH = 144, TW = 8, TH = 4, OX = 128, OY = 60, WALL = 14, SCALE = 3;
+  const CW = 304, CH = 204, TW = 8, TH = 4, OX = 152, OY = 100, WALL = 44, SCALE = 3;
+  const P = {
+    void: '#07050a', floor: '#3e3027', floorLine: '#2e241c', floorWorn: '#352920', edge: '#241a14',
+    wallN: '#4a3a32', wallW: '#3b2e28', wallCap: '#6a574b',
+    wood: '#3a2a22', woodDark: '#2a1d17', woodLight: '#4a372c',
+    metal: '#1e1c1c', metalDark: '#141313', metalLight: '#2a2727',
+    cyan: '#35e0dc', cyanDim: '#136b69', cyanDeep: '#0b2a2c',
+    red: '#ff3344', redDim: '#7a1228', neon: '#c8242a', neonDark: '#3a0a0c',
+    leaf: '#2e6b3a', leafDark: '#1f4a2a', rug: '#5a1a1c', rugLine: '#7a2a2a', rugDark: '#43121a',
+    hair: '#1a1412', hoodie: '#151c2e', hoodieDark: '#0e1320', chair: '#1a1a1a',
+    bed: '#2a3028', bedDark: '#1e241e', pillow: '#6a3a2a', lamp: '#ffb64a', paper: '#d9cdb8', cork: '#5a4330',
+  };
   const iso = (x, y) => [OX + (x - y) * TW, OY + (x + y) * TH];
   const path = (pts) => { ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
   const poly = (pts, c) => { ctx.fillStyle = c; path(pts); ctx.fill(); };
-  const outline = (pts, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1; path(pts); ctx.stroke(); };
-  const line = (a, b, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
+  const outline = (pts, c, w = 1) => { ctx.strokeStyle = c; ctx.lineWidth = w; path(pts); ctx.stroke(); };
+  const line = (a, b, c, w = 1) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
   const quad = (x, y, w, d, z = 0) => [iso(x, y), iso(x + w, y), iso(x + w, y + d), iso(x, y + d)].map(([px, py]) => [px, py - z]);
-  // cuboid standing on tile (x, y) with a w x d tile footprint, h px tall, lifted z px
+  // cuboid on tile (x, y), footprint w x d, h px tall, lifted z px. `left` is
+  // the face toward the camera's left (+y side), `right` toward +x.
   const box = (x, y, w, d, h, top, left, right, z = 0) => {
     const [, b, c, l] = quad(x, y, w, d, z);
     poly([l, c, [c[0], c[1] - h], [l[0], l[1] - h]], left);
@@ -548,67 +563,128 @@
   };
   const dot = (x, y, z, c, size = 1) => { const [px, py] = iso(x, y); ctx.fillStyle = c; ctx.fillRect(Math.round(px - size / 2), Math.round(py - z - size / 2), size, size); };
   const blink = (period, phase = 0) => (Math.floor(Date.now() / period) + phase) % 3 !== 0;
+  // points on the start room's back walls: north wall runs along y = 0, west wall along x = 0
+  const onN = (x, z) => { const [px, py] = iso(x, 0); return [px, py - z]; };
+  const onW = (y, z) => { const [px, py] = iso(0, y); return [px, py - z]; };
 
-  // one sprite per occupied tile
+  // one sprite per occupied equipment tile
   const sprites = {
-    keyboard: (x, y) => { box(x + .15, y + .15, .7, .7, 3, '#1a1017', '#0e080c', '#140b10'); const a = iso(x + .25, y + .85), b = iso(x + .85, y + .85); line([a[0], a[1] - 3], [b[0], b[1] - 3], '#ff2e4d'); },
-    monitor:  (x, y) => { box(x + .2, y + .2, .6, .6, 5, '#4f8dff', '#1c1c1c', '#262626'); },
-    laptop:   (x, y) => { box(x + .2, y + .2, .6, .6, 4, '#3a2818', '#241810', '#2e2016'); box(x + .3, y + .3, .4, .4, 1, '#0b1636', '#111', '#1a1a1a', 4); dot(x + .5, y + .5, 6, '#4f8dff'); },
-    rack:     (x, y) => { box(x + .15, y + .15, .7, .7, 16, '#2a3338', '#161b1e', '#1e2528'); for (let i = 0; i < 4; i++) dot(x + .78, y + .62, 4 + i * 3, blink(400, i + x) ? '#ff2e4d' : '#3a0a12'); },
-    gpu:      (x, y) => { box(x + .2, y + .2, .6, .6, 9, '#202020', '#121212', '#1a1a1a'); for (let i = 0; i < 3; i++) dot(x + .75, y + .65, 3 + i * 2, i % 2 ? '#ff2e4d' : '#4f8dff'); },
-    botnet:   (x, y) => { box(x + .4, y + .4, .2, .2, 14, '#333', '#161616', '#222'); dot(x + .5, y + .5, 16, blink(300, x + y) ? '#ff2e4d' : '#4f8dff', 2); },
+    keyboard: (x, y) => { box(x + .15, y + .2, .7, .6, 3, P.metal, P.metalDark, P.metalLight); const a = iso(x + .22, y + .8), b = iso(x + .82, y + .8); line([a[0], a[1] - 3], [b[0], b[1] - 3], P.cyan); },
+    monitor:  (x, y) => { box(x + .2, y + .25, .6, .5, 5, P.metalLight, P.cyan, P.metal); },
+    laptop:   (x, y) => { box(x + .15, y + .15, .7, .7, 4, P.wood, P.woodDark, P.woodLight); box(x + .3, y + .3, .4, .4, 1, P.cyanDeep, P.metal, P.metal, 4); dot(x + .5, y + .5, 6, P.cyan); },
+    rack:     (x, y) => { box(x + .15, y + .15, .7, .7, 18, P.metalLight, P.metalDark, P.metal); for (let i = 0; i < 5; i++) dot(x + .78, y + .62, 4 + i * 3, blink(400, i + x) ? P.red : P.redDim); },
+    gpu:      (x, y) => { box(x + .2, y + .2, .6, .6, 10, P.metal, P.metalDark, P.metalLight); for (let i = 0; i < 4; i++) dot(x + .75, y + .65, 3 + i * 2, i % 2 ? P.red : P.cyan); },
+    botnet:   (x, y) => { box(x + .4, y + .4, .2, .2, 14, P.metalLight, P.metalDark, P.metal); dot(x + .5, y + .5, 16, blink(300, x + y) ? P.red : P.cyan, 2); },
+  };
+
+  // furniture in the start room
+  const plant = (x, y, z = 0, s = 1) => {
+    box(x + .3, y + .3, .4, .4, 4 * s, P.woodDark, P.wood, P.woodLight, z);
+    const [px, py] = iso(x + .5, y + .5);
+    [[0, 9, P.leaf], [-4, 7, P.leafDark], [4, 7, P.leafDark], [-2, 12, P.leaf], [3, 12, P.leafDark], [0, 15, P.leaf]]
+      .forEach(([dx, dz, c]) => poly([[px + dx * s, py - z - dz * s - 3 * s], [px + (dx - 3) * s, py - z - dz * s + s], [px + (dx + 3) * s, py - z - dz * s + s]], c));
+  };
+  const deskN = (x, screen) => {
+    box(x, .15, 1, .75, 7, P.wood, P.woodDark, P.woodLight);
+    if (screen) {
+      box(x + .15, .2, .7, .1, 6, P.metalLight, P.cyan, P.metal, 7);
+      const a = iso(x + .22, .3), b = iso(x + .78, .3);
+      for (let i = 0; i < 3; i++) line([a[0] + 1, a[1] - 8.5 - i * 1.6], [b[0] - 1 - i * 2, b[1] - 8.5 - i * 1.6], P.cyanDeep);
+    }
+    if (x === 2) { const a = iso(2.3, .85), b = iso(2.75, .85); line([a[0], a[1] - 7], [b[0], b[1] - 7], P.cyan); }
+  };
+  const deskW = (y) => {
+    box(.15, y, .75, 1, 7, P.wood, P.woodDark, P.woodLight);
+    if (y === 1) { box(.3, y + .2, .5, .6, 10, P.metal, P.metalDark, P.metalLight, 7); for (let i = 0; i < 3; i++) dot(.82, y + .5, 9 + i * 2.5, blink(600, i) ? P.cyan : P.cyanDim); }
+    if (y === 2) plant(0, y, 7, .6);
+  };
+  const player = () => {
+    box(2.3, 1.3, .4, .4, 3, P.chair, '#0e0e0e', '#141414');
+    box(2.32, 1.34, .36, .36, 8, P.hoodie, P.hoodieDark, P.hoodie, 3);
+    box(2.38, 1.4, .24, .24, 4, P.hair, P.hair, '#221a16', 11);
+    box(2.28, 1.72, .44, .1, 10, P.chair, '#0e0e0e', '#222', 3);          // chair back, nearest the camera
+  };
+  const bed = () => {
+    box(4.1, 4.1, 1.8, 1.8, 3, P.wood, P.woodDark, P.woodLight);
+    box(4.15, 4.15, 1.7, 1.7, 4, P.bed, P.bedDark, P.bed, 3);
+    box(4.25, 4.2, 1.5, .5, 2, P.pillow, '#4a2a1e', P.pillow, 7);
+    poly(quad(4.15, 4.15, 1.7, 1.7, 7), 'rgba(255, 60, 60, .14)');             // neon on the blanket
+  };
+  const nightstand = () => {
+    box(5.25, 3.25, .5, .5, 5, P.wood, P.woodDark, P.woodLight);
+    box(5.4, 3.4, .2, .2, 4, P.lamp, '#b07a2a', '#d08f30', 5);
+    dot(5.5, 3.5, 11, P.lamp, 3);
+  };
+  const shelf = () => {
+    box(2.1, 5.15, 1.8, .7, 12, P.wood, P.woodDark, P.woodLight);
+    const books = [P.red, P.cyanDim, '#8a6a3a', P.wood, P.red, '#d9cdb8', P.cyanDim, '#8a6a3a'];
+    books.forEach((c, i) => { const [px, py] = iso(2.25 + i * .2, 5.85); line([px, py - 2], [px, py - 6], c); line([px, py - 7], [px, py - 11], books[(i + 3) % books.length]); });
+    plant(2.6, 5.1, 12, .5);
   };
 
   const drawRoom = () => {
-    ctx.fillStyle = '#05040a'; ctx.fillRect(0, 0, CW, CH);
+    ctx.fillStyle = P.void; ctx.fillRect(0, 0, CW, CH);
     const all = [];
     for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) all.push([rx, ry]);
     all.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
-    // floors: lit rooms get a tile grid, dark rooms a faint outline
+    const lit = (rx, ry) => isLit(S, rx, ry);
+
+    // floors: lit rooms get worn tiles, dark rooms a faint outline; a floor edge hangs below exterior front edges
     for (const [rx, ry] of all) {
-      const x0 = rx * SIDE, y0 = ry * SIDE, on = isLit(S, rx, ry);
-      poly(quad(x0, y0, SIDE, SIDE), on ? '#141a33' : '#0b0812');
-      if (on) for (let i = 1; i < SIDE; i++) { line(iso(x0 + i, y0), iso(x0 + i, y0 + SIDE), '#1b2342'); line(iso(x0, y0 + i), iso(x0 + SIDE, y0 + i), '#1b2342'); }
-      else outline(quad(x0, y0, SIDE, SIDE), '#1e1020');
+      const x0 = rx * SIDE, y0 = ry * SIDE;
+      if (!lit(rx, ry)) { poly(quad(x0, y0, SIDE, SIDE), '#0b080c'); outline(quad(x0, y0, SIDE, SIDE), '#17101a'); continue; }
+      poly(quad(x0, y0, SIDE, SIDE), P.floor);
+      for (let i = 0; i < SIDE * 2; i++) for (let j = 0; j < SIDE * 2; j++) if ((i * 7 + j * 13 + rx * 3 + ry * 5) % 6 === 0) poly(quad(x0 + i / 2, y0 + j / 2, .5, .5), P.floorWorn);
+      for (let i = 1; i < SIDE * 2; i++) { line(iso(x0 + i / 2, y0), iso(x0 + i / 2, y0 + SIDE), P.floorLine); line(iso(x0, y0 + i / 2), iso(x0 + SIDE, y0 + i / 2), P.floorLine); }
+      if (!lit(rx, ry + 1)) { const l = iso(x0, y0 + SIDE), c = iso(x0 + SIDE, y0 + SIDE); poly([l, c, [c[0], c[1] + 3], [l[0], l[1] + 3]], P.edge); }
+      if (!lit(rx + 1, ry)) { const c = iso(x0 + SIDE, y0 + SIDE), r = iso(x0 + SIDE, y0); poly([c, r, [r[0], r[1] + 3], [c[0], c[1] + 3]], P.edge); }
     }
-    // low back walls on the exterior edges of lit rooms
+    // tall back walls on the exterior edges of lit rooms, with a lighter cap for thickness
     for (const [rx, ry] of all) {
-      if (!isLit(S, rx, ry)) continue;
+      if (!lit(rx, ry)) continue;
       const x0 = rx * SIDE, y0 = ry * SIDE, a = iso(x0, y0);
-      if (!isLit(S, rx, ry - 1)) { const b = iso(x0 + SIDE, y0); poly([a, b, [b[0], b[1] - WALL], [a[0], a[1] - WALL]], '#2a0f1a'); line([a[0], a[1] - WALL], [b[0], b[1] - WALL], '#4a1a2a'); }
-      if (!isLit(S, rx - 1, ry)) { const d = iso(x0, y0 + SIDE); poly([a, d, [d[0], d[1] - WALL], [a[0], a[1] - WALL]], '#1c0a12'); line([a[0], a[1] - WALL], [d[0], d[1] - WALL], '#3a1422'); }
+      if (!lit(rx, ry - 1)) { const b = iso(x0 + SIDE, y0); poly([a, b, [b[0], b[1] - WALL], [a[0], a[1] - WALL]], P.wallN); line([a[0], a[1] - WALL], [b[0], b[1] - WALL], P.wallCap, 2); }
+      if (!lit(rx - 1, ry)) { const d = iso(x0, y0 + SIDE); poly([a, d, [d[0], d[1] - WALL], [a[0], a[1] - WALL]], P.wallW); line([a[0], a[1] - WALL], [d[0], d[1] - WALL], P.wallCap, 2); }
     }
-    // window with city lights on the start room's back wall, while that side is still exterior
-    if (!isLit(S, 0, -1)) {
-      const up = (x, z) => { const [px, py] = iso(x, 0); return [px, py - z]; };
-      poly([up(2.8, 11), up(4.2, 11), up(4.2, 4), up(2.8, 4)], '#0e1f52');
-      for (let i = 0; i < 7; i++) dot(2.95 + i * .18, 0, 5 + (i * 3) % 5, i % 3 ? '#4f8dff' : '#ff2e4d');
+    // start room wall dressing
+    if (!lit(0, -1)) {
+      line(onN(0, 40), onN(SIDE, 40), P.metalLight); line(onN(2.5, 40), onN(2.5, 31), P.metalLight);          // conduit
+      box(1.1, .05, 1.8, .3, 1, P.wood, P.woodDark, P.woodLight, 26);                                          // wall shelf
+      for (let i = 0; i < 3; i++) { box(1.2 + i * .6, .05, .45, .28, 5, P.metalLight, P.metalDark, P.metal, 27); dot(1.5 + i * .6, .36, 30, blink(500, i) ? P.cyan : P.cyanDim); }
+      poly([onN(.3, 34), onN(.9, 34), onN(.9, 22), onN(.3, 22)], '#1a1416'); poly([onN(.4, 31), onN(.8, 31), onN(.8, 25), onN(.4, 25)], '#6a1a1a');  // poster
+      poly([onN(3.7, 41), onN(SIDE, 41), onN(SIDE, 2), onN(3.7, 2)], 'rgba(255, 60, 60, .10)');               // neon wash on the wall
+      poly([onN(4.1, 36), onN(5.6, 36), onN(5.6, 8), onN(4.1, 8)], P.neonDark);                               // window
+      for (let z = 9; z < 36; z += 2) line(onN(4.1, z), onN(5.6, z), z % 4 ? P.neon : P.neonDark);              // blinds
+      outline([onN(4.05, 36.5), onN(5.65, 36.5), onN(5.65, 7.5), onN(4.05, 7.5)], P.metal);
     }
-    // objects, depth-sorted per tile (x + y); everything is one tile wide
+    if (!lit(-1, 0)) {
+      line(onW(0, 40), onW(SIDE, 40), P.metalLight);
+      poly([onW(1.2, 34), onW(2.6, 34), onW(2.6, 20), onW(1.2, 20)], '#1a1416'); poly([onW(1.5, 31), onW(2.3, 31), onW(2.3, 23), onW(1.5, 23)], '#5a1414');  // poster
+      poly([onW(3, 31), onW(4.8, 31), onW(4.8, 19), onW(3, 19)], P.cork);                                       // pinboard
+      [[3.2, 28], [3.6, 24], [4.1, 27], [4.4, 22], [3.9, 21], [3.3, 22]].forEach(([y, z]) => { const [px, py] = onW(y, z); ctx.fillStyle = P.paper; ctx.fillRect(px, py, 2, 2); });
+      line(onW(3.2, 27), onW(4.4, 23), P.red); line(onW(3.6, 23), onW(4.1, 26), P.red);
+    }
+    // floor dressing in the start room
+    poly(quad(1, 2, 3, 3), P.rug); outline(quad(1.25, 2.25, 2.5, 2.5), P.rugLine);
+    for (let i = 0; i < 40; i++) dot(1 + ((i * 7) % 30) / 10, 2 + ((i * 11) % 30) / 10, 0, P.rugDark);
+    if (!lit(0, -1)) poly([iso(4, .05), iso(5.7, .05), iso(6, 2.6), iso(3.6, 2.6)], 'rgba(255, 60, 60, .16)');  // neon on the floor
+    poly(quad(4.6, 2.6, 1.4, 1.4), 'rgba(255, 182, 74, .07)');                                                      // lamp light
+
+    // objects, depth-sorted by tile (x + y); multi-tile furniture uses its nearest tile
     const objs = [];
     const L = (id) => S.levels[id] || 0;
-    const monitors = Math.min(3, 1 + Math.floor(L('monitor') / 10));
-    [1, 2, 3].forEach((x, i) => objs.push({ d: x + 1, f: () => {
-      box(x, 1.1, 1, .8, 7, '#4a3520', '#2c1f12', '#3a2818');                      // desk segment
-      if (i < monitors) {                                                            // monitor back, blue rim
-        box(x + .2, 1.15, .6, .12, 6, '#0b1636', '#1c1c1c', '#262626', 7);
-        const a = iso(x + .2, 1.15), b = iso(x + .8, 1.15); line([a[0], a[1] - 13], [b[0], b[1] - 13], '#4f8dff');
-      }
-      if (x === 2 && L('keyboard')) { const a = iso(2.25, 1.85), b = iso(2.75, 1.85); line([a[0], a[1] - 7], [b[0], b[1] - 7], '#ff2e4d'); }
-    } }));
-    objs.push({ d: 4, f: () => {                                                     // player on the chair, hood up
-      box(2.3, 2.3, .4, .4, 3, '#1a1a1a', '#0e0e0e', '#141414');
-      box(2.3, 2.3, .4, .4, 9, '#131a30', '#0c1020', '#101628', 3);
-      box(2.36, 2.36, .28, .28, 4, '#1b2440', '#0c1020', '#101628', 12);
-    } });
+    const screens = Math.min(3, 1 + Math.floor(L('monitor') / 10));
+    [1, 2, 3].forEach((x, i) => objs.push({ d: x, f: () => deskN(x, i < screens) }));
+    [1, 2].forEach((y) => objs.push({ d: y, f: () => deskW(y) }));
+    objs.push({ d: 3, f: player }, { d: 10, f: bed }, { d: 8, f: nightstand }, { d: 8, f: shelf }, { d: 5, f: () => plant(0, 5) }, { d: 5, f: () => plant(5, 0) });
     for (const p of placements(S)) objs.push({ d: p.x + p.y, f: () => (sprites[p.item.id] || sprites.laptop)(p.x, p.y) });
     objs.sort((a, b) => a.d - b.d).forEach((o) => o.f());
   };
   setInterval(() => { if (S) drawRoom(); }, 300);
-  // centre the view on the start room; phones pan by touch, mice by dragging
+  // centre the view on the start room (walls included); phones pan by touch, mice by dragging
   const centerHouse = () => {
     const sc = $('roomScroll'), [cx, cy] = iso(SIDE / 2, SIDE / 2);
-    sc.scrollLeft = cx * SCALE - sc.clientWidth / 2; sc.scrollTop = cy * SCALE - sc.clientHeight / 2;
+    sc.scrollLeft = cx * SCALE - sc.clientWidth / 2; sc.scrollTop = (cy - WALL / 2 - 4) * SCALE - sc.clientHeight / 2;
   };
   window.addEventListener('resize', centerHouse);
   (() => {

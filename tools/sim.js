@@ -21,7 +21,7 @@ const costOf = (it, lvl) => Math.floor(it.baseCost * Math.pow(C.costGrowth, lvl)
 const roomCost = (rooms) => Math.floor(C.rooms.baseCost * Math.pow(C.rooms.costGrowth, rooms - 1));
 const maxRooms = 1 + C.rooms.order.length;
 const roomTiles = C.rooms.tilesPerSide ** 2;
-const capacity = (rooms) => rooms * roomTiles - C.rooms.deskTiles.length;
+const capacity = (rooms) => rooms * roomTiles - C.rooms.furnitureTiles.length;
 const roles = (it) => {
   if (idleMode === 'helpers') {
     if (it.helper) return { idle: it.idle };

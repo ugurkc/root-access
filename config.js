@@ -35,25 +35,34 @@ window.RA_CONFIG = {
     { id: 'keyboard', name: 'Mech Keyboard', desc: 'Clackier keys, faster exploits.',
       baseCost: 10,    tap: 1,              footprint: 1 },
     { id: 'laptop',   name: 'Old Laptop',    desc: 'Runs scripts while you sleep.',
-      baseCost: 50,    idle: 0.5, helperModeTap: 2, footprint: 1 },
+      baseCost: 50,    idle: 0.5, helperModeTap: 2, footprint: 2 },
     { id: 'monitor',  name: 'Second Monitor',desc: 'More terminals, more hacks.',
       baseCost: 250,   tap: 5,              footprint: 1 },
     { id: 'rack',     name: 'Server Rack',   desc: 'Hums in the corner. Earns.',
-      baseCost: 1500,  idle: 5, helperModeTap: 15, footprint: 2 },
+      baseCost: 1500,  idle: 5, helperModeTap: 15, footprint: 3 },
     { id: 'gpu',      name: 'GPU Cluster',   desc: 'Cracks hashes by the million.',
-      baseCost: 8000,  tap: 30,             footprint: 2 },
+      baseCost: 8000,  tap: 30,             footprint: 3 },
     { id: 'botnet',   name: 'Botnet',        desc: 'Ten thousand machines work for you.',
-      baseCost: 40000, idle: 80, helper: true, footprint: 1 },
+      baseCost: 40000, idle: 80, helper: true, footprint: 2 },
   ],
 
   // ---- House --------------------------------------------------------------
   // Square rooms seen from above, drawn as diamonds. You start in the centre
   // room; buying "Expand" lights the next room in `order` ([dx, dy] from the
   // start room). Every equipment level takes `footprint` tiles, so a full
-  // house gates upgrades. 9 rooms x 25 tiles = 225, minus the desk.
+  // house gates upgrades. 9 rooms x 36 tiles = 324, minus the furniture
+  // in the start room (desk, chair, bed, shelf, lamp, plants = 15 tiles).
   rooms: {
-    tilesPerSide: 5,
-    deskTiles: [[1, 1], [2, 1], [3, 1], [2, 2]],  // main desk + chair, start room
+    tilesPerSide: 6,
+    furnitureTiles: [
+      [1, 0], [2, 0], [3, 0],          // desk along the back wall
+      [0, 1], [0, 2],                  // desk return along the left wall
+      [2, 1],                          // chair
+      [4, 4], [5, 4], [4, 5], [5, 5],  // bed
+      [5, 3],                          // nightstand + lamp
+      [2, 5], [3, 5],                  // bookshelf
+      [0, 5], [5, 0],                  // plants
+    ],
     baseCost: 500,
     costGrowth: 3,                                // each room costs 3x the last
     order: [[1, 0], [-1, 0], [0, -1], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]],
