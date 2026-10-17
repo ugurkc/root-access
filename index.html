@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0a0d0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Root Access</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+  /* Layout: one phone column. Tabs pinned on top, money + room, big tap
+     zone, shop list below. Dark CRT pixel look; single theme by design. */
+  :root {
+    --bg: #0a0d0b;
+    --panel: #121713;
+    --panel-2: #1a221c;
+    --border: #2d3b30;
+    --fg: #cfe3d2;
+    --dim: #6f8a74;
+    --green: #58ff7d;
+    --green-dim: #1f6b33;
+    --amber: #ffb64a;
+    --red: #ff5f5f;
+    --font-display: 'Press Start 2P', 'Courier New', monospace;
+    --font-body: 'VT323', 'Courier New', monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 20px;
+    line-height: 1.2;
+    -webkit-font-smoothing: none;
+    touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+  }
+  body.shake { animation: shake 180ms steps(4) 1; }
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-3px, 2px); }
+    50% { transform: translate(3px, -2px); }
+    75% { transform: translate(-2px, -2px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.shake { animation: none; }
+    .pop { animation-duration: 1ms; }
+  }
+
+  .app {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100%;
+    display: flex; flex-direction: column; gap: 10px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    padding-block: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--green);
+    text-shadow: 0 0 6px rgba(88,255,125,.45);
+  }
+  h1 small { color: var(--dim); font-size: 8px; display: block; margin-top: 4px; letter-spacing: 2px; }
+  .iconbtn {
+    font-family: var(--font-display); font-size: 9px;
+    background: var(--panel); color: var(--fg);
+    border: 2px solid var(--border); padding: 8px 10px; cursor: pointer;
+  }
+  .iconbtn:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  /* Variant tabs */
+  .tabs { display: flex; flex-direction: column; gap: 6px; }
+  .tabrow { display: flex; align-items: stretch; gap: 4px; }
+  .tabrow .axis {
+    font-family: var(--font-display); font-size: 8px; color: var(--dim);
+    width: 42px; flex: none; display: flex; align-items: center;
+  }
+  .tabrow button {
+    flex: 1; min-width: 0;
+    font-family: var(--font-display); font-size: 8px; letter-spacing: .5px;
+    padding: 10px 4px;
+    background: var(--panel); color: var(--dim);
+    border: 2px solid var(--border); cursor: pointer;
+  }
+  .tabrow button[aria-selected="true"] {
+    color: var(--bg); background: var(--green); border-color: var(--green);
+    box-shadow: 0 0 10px rgba(88,255,125,.35);
+  }
+
+  /* Money */
+  .money {
+    text-align: center; padding: 4px 0 0;
+  }
+  .money .amount {
+    font-size: 48px; line-height: 1; color: var(--green);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px rgba(88,255,125,.35);
+  }
+  .money .rates { color: var(--dim); font-size: 18px; margin-top: 2px; }
+  .money .rates b { color: var(--fg); font-weight: normal; }
+
+  /* Room scene */
+  .room {
+    position: relative;
+    border: 2px solid var(--border);
+    background: #05070a;
+    aspect-ratio: 16 / 9; max-width: 100%;
+    overflow: hidden;
+  }
+  .room canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .room::after { /* scanlines */
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.28) 2px 3px);
+  }
+
+  /* Tap zone */
+  .tapzone { position: relative; }
+  .hack {
+    width: 100%;
+    font-family: var(--font-display); font-size: 16px; letter-spacing: 2px;
+    padding: 28px 12px;
+    color: var(--bg); background: var(--green);
+    border: 0; border-bottom: 6px solid var(--green-dim);
+    cursor: pointer;
+    position: relative; overflow: hidden;
+    transition: transform 60ms steps(2);
+  }
+  .hack.squash { transform: scale(.96, .92) translateY(3px); border-bottom-width: 2px; }
+  .hack.running { background: var(--panel-2); color: var(--fg); border-bottom-color: var(--border); }
+  .hack.ready { background: var(--amber); border-bottom-color: #8a5a10; animation: pulse 700ms steps(2) infinite; }
+  @keyframes pulse { 50% { filter: brightness(1.25); } }
+  .hack .fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: rgba(88,255,125,.35); pointer-events: none;
+  }
+  .hack.running .fill { background: rgba(88,255,125,.25); }
+  .hack .label { position: relative; display: block; }
+  .hack .sub { position: relative; display: block; font-family: var(--font-body); font-size: 18px; letter-spacing: 0; margin-top: 8px; opacity: .85; }
+  .pop {
+    position: absolute; pointer-events: none;
+    font-size: 26px; color: var(--green); text-shadow: 0 0 6px rgba(88,255,125,.6);
+    animation: pop 800ms steps(8) forwards;
+    will-change: transform, opacity;
+  }
+  .pop.big { font-size: 36px; color: var(--amber); text-shadow: 0 0 8px rgba(255,182,74,.6); }
+  @keyframes pop {
+    from { transform: translate(-50%, 0); opacity: 1; }
+    to   { transform: translate(-50%, -90px); opacity: 0; }
+  }
+
+  /* Shop */
+  .shop { display: flex; flex-direction: column; gap: 6px; }
+  .shop h2 {
+    margin: 4px 0 0; font-family: var(--font-display); font-size: 9px; color: var(--dim); letter-spacing: 2px;
+  }
+  .item {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
+    background: var(--panel); border: 2px solid var(--border); padding: 8px 10px;
+  }
+  .item .name { font-size: 22px; }
+  .item .name .lvl { color: var(--amber); margin-left: 6px; }
+  .item .effect { color: var(--dim); font-size: 17px; }
+  .item .effect b { color: var(--fg); font-weight: normal; }
+  .item button {
+    grid-row: 1 / span 2;
+    font-family: var(--font-display); font-size: 9px;
+    min-width: 92px; padding: 12px 8px;
+    background: var(--panel-2); color: var(--green);
+    border: 2px solid var(--green-dim); cursor: pointer;
+  }
+  .item button:disabled { color: var(--dim); border-color: var(--border); cursor: default; }
+  .item button .cost { display: block; font-family: var(--font-body); font-size: 20px; margin-top: 4px; }
+  .item.maxed button { color: var(--amber); border-color: var(--amber); }
+
+  footer { color: var(--dim); font-size: 15px; text-align: center; margin-top: 6px; }
+
+  /* Slot overlay: Continue / New run */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(5,7,10,.88);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 10;
+  }
+  .overlay[hidden] { display: none; }
+  .card {
+    width: 100%; max-width: 380px;
+    background: var(--panel); border: 2px solid var(--green);
+    box-shadow: 0 0 24px rgba(88,255,125,.2);
+    padding: 18px 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .card h2 { margin: 0; font-family: var(--font-display); font-size: 11px; color: var(--green); line-height: 1.6; }
+  .card p { margin: 0; color: var(--dim); font-size: 19px; }
+  .card p b { color: var(--fg); font-weight: normal; }
+  .card .actions { display: flex; flex-direction: column; gap: 8px; }
+  .card button {
+    font-family: var(--font-display); font-size: 10px; padding: 14px;
+    border: 2px solid var(--border); background: var(--panel-2); color: var(--fg); cursor: pointer;
+  }
+  .card button.primary { background: var(--green); color: var(--bg); border-color: var(--green); }
+  .card button.danger { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>ROOT ACCESS<small>DESIGN BENCH</small></h1>
+    <div style="display:flex;gap:6px">
+      <button class="iconbtn" id="muteBtn" aria-pressed="false" title="Toggle sound">SND</button>
+      <button class="iconbtn" id="menuBtn" title="Continue or new run">RUN</button>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Variants">
+    <div class="tabrow" role="tablist" id="tapTabs"><span class="axis">TAP</span></div>
+    <div class="tabrow" role="tablist" id="idleTabs"><span class="axis">IDLE</span></div>
+  </nav>
+
+  <section class="money" aria-live="off">
+    <div class="amount" id="money">$0</div>
+    <div class="rates" id="rates"></div>
+  </section>
+
+  <section class="room"><canvas id="room" width="160" height="90"></canvas></section>
+
+  <section class="tapzone" id="tapzone">
+    <button class="hack" id="hack">
+      <span class="fill" id="fill"></span>
+      <span class="label" id="hackLabel">HACK</span>
+      <span class="sub" id="hackSub"></span>
+    </button>
+  </section>
+
+  <section class="shop">
+    <h2>EQUIPMENT</h2>
+    <div id="shop"></div>
+  </section>
+
+  <footer id="hint"></footer>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="card">
+    <h2 id="ovTitle">INSTANT / EQUIPMENT</h2>
+    <p id="ovBody"></p>
+    <div class="actions" id="ovActions"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  const C = window.RA_CONFIG;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- economy (pure) ----------
+  const roleOf = (item, idleMode) => {
+    if (idleMode === 'helpers') {
+      if (item.helper) return { idle: item.idle };
+      if (item.helperModeTap) return { tap: item.helperModeTap };
+    }
+    if (idleMode === 'none' && item.idle) return null;
+    return { tap: item.tap, idle: item.idle };
+  };
+  const activeItems = (idleMode) => C.items.filter((it) => roleOf(it, idleMode));
+  const costOf = (item, level) => Math.floor(item.baseCost * Math.pow(C.costGrowth, level));
+  const tapValue = (s) => C.baseTap + activeItems(s.idle).reduce((sum, it) => sum + (roleOf(it, s.idle).tap || 0) * (s.levels[it.id] || 0), 0);
+  const idleRate = (s) => activeItems(s.idle).reduce((sum, it) => sum + (roleOf(it, s.idle).idle || 0) * (s.levels[it.id] || 0), 0);
+
+  const fmt = (n) => {
+    const d = C.display;
+    if (n < 1000) return d.currency + Math.floor(n);
+    let i = 0;
+    while (n >= 1000 && i < d.suffixes.length - 1) { n /= 1000; i++; }
+    return d.currency + n.toFixed(d.decimals) + d.suffixes[i];
+  };
+  const fmtRate = (n) => (n < 10 && n !== Math.floor(n) ? C.display.currency + n.toFixed(1) : fmt(n));
+
+  // ---------- saves ----------
+  const slotKey = (tap, idle) => `ra${C.version}:${tap}-${idle}`;
+  const load = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+  const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const freshState = (tap, idle) => ({
+    tap, idle, money: 0, levels: {}, totalEarned: 0, taps: 0,
+    bar: { taps: 0, value: 0 }, job: null,
+    createdAt: Date.now(), lastSeen: Date.now(), playedMs: 0,
+  });
+
+  let S = null;           // current state
+  let lastTick = performance.now();
+  let muted = load(`ra${C.version}:muted`) === true;
+
+  const save = () => { if (!S) return; S.lastSeen = Date.now(); store(slotKey(S.tap, S.idle), S); };
+
+  // ---------- audio (synthesized) ----------
+  let AC = null;
+  const audio = () => { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; };
+  const beep = (freq, dur, type = 'square', gain = 0.08, when = 0) => {
+    if (muted || !C.feel.sound) return;
+    const ac = audio(), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain * C.feel.volume, ac.currentTime + when);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + when + dur);
+    o.connect(g).connect(ac.destination); o.start(ac.currentTime + when); o.stop(ac.currentTime + when + dur + 0.02);
+  };
+  const clack = () => {
+    if (muted || !C.feel.sound) return;
+    const ac = audio(), len = ac.sampleRate * 0.03, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = buf; f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = 0.25 * C.feel.volume;
+    src.connect(f).connect(g).connect(ac.destination); src.start();
+  };
+  const cash = () => { beep(880, .06); beep(1320, .08, 'square', .08, .05); };
+  const bigCash = () => { [660, 880, 1100, 1480].forEach((f, i) => beep(f, .09, 'square', .09, i * .06)); };
+  const buySound = () => { beep(440, .05, 'triangle', .12); beep(660, .1, 'triangle', .12, .05); };
+  const denied = () => beep(140, .12, 'sawtooth', .06);
+
+  // ---------- feel ----------
+  const pop = (x, y, text, big) => {
+    if (!C.feel.pops) return;
+    const el = document.createElement('span');
+    el.className = 'pop' + (big ? ' big' : ''); el.textContent = text;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    $('tapzone').appendChild(el);
+    setTimeout(() => el.remove(), 820);
+  };
+  const shake = () => { if (!C.feel.shake) return; document.body.classList.remove('shake'); void document.body.offsetWidth; document.body.classList.add('shake'); };
+  const squash = () => { if (!C.feel.squash) return; const h = $('hack'); h.classList.add('squash'); setTimeout(() => h.classList.remove('squash'), 70); };
+
+  // ---------- earning ----------
+  const earn = (amount, x, y, tapsWorth) => {
+    S.money += amount; S.totalEarned += amount;
+    const big = tapsWorth >= C.feel.shakeThresholdTaps;
+    pop(x, y, '+' + fmt(amount), big);
+    if (big) { shake(); bigCash(); } else cash();
+    renderMoney(); renderShop(); renderHack();
+  };
+
+  const onTap = (e) => {
+    const rect = $('tapzone').getBoundingClientRect();
+    const x = (e.clientX || rect.left + rect.width / 2) - rect.left;
+    const y = (e.clientY || rect.top + rect.height / 2) - rect.top;
+    S.taps++;
+    squash(); clack();
+    const tv = tapValue(S);
+    if (S.tap === 'instant') {
+      earn(tv, x, y, 1);
+    } else if (S.tap === 'bar') {
+      const need = C.tapModes.bar.jobTaps;
+      S.bar.taps++; S.bar.value += tv;
+      if (S.bar.taps >= need) { const v = S.bar.value; S.bar = { taps: 0, value: 0 }; earn(v, x, y, need); }
+      else renderHack();
+    } else if (S.tap === 'jobs') {
+      const cfg = C.tapModes.jobs;
+      if (!S.job) { S.job = { start: Date.now(), value: tv * cfg.jobTapEquivalent }; beep(520, .08, 'triangle', .1); renderHack(); }
+      else if (Date.now() - S.job.start >= cfg.jobDuration * 1000) { const v = S.job.value; S.job = null; earn(v, x, y, cfg.jobTapEquivalent); renderHack(); }
+      else { denied(); }
+    }
+  };
+
+  const buy = (item) => {
+    const lvl = S.levels[item.id] || 0;
+    if (lvl >= C.maxLevel) return;
+    const cost = costOf(item, lvl);
+    if (S.money < cost) { denied(); return; }
+    S.money -= cost; S.levels[item.id] = lvl + 1;
+    buySound(); renderAll(); save();
+  };
+
+  // ---------- tick ----------
+  const tick = () => {
+    const now = performance.now(); const dt = Math.min(0.5, (now - lastTick) / 1000); lastTick = now;
+    if (S) {
+      S.playedMs += dt * 1000;
+      const r = idleRate(S);
+      if (r > 0) { S.money += r * dt; S.totalEarned += r * dt; renderMoney(); }
+      if (S.tap === 'jobs' && S.job) renderHack();
+      renderShopAffordability();
+    }
+    requestAnimationFrame(tick);
+  };
+  setInterval(save, 5000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+
+  // ---------- rendering ----------
+  const renderMoney = () => {
+    $('money').textContent = fmt(S.money);
+    const r = idleRate(S);
+    $('rates').innerHTML = `<b>${fmt(tapValue(S))}</b>/tap` + (r > 0 ? ` · <b>${fmtRate(r)}</b>/s` : '');
+  };
+  const renderHack = () => {
+    const h = $('hack'), fill = $('fill'), label = $('hackLabel'), sub = $('hackSub');
+    h.classList.remove('running', 'ready');
+    if (S.tap === 'instant') { fill.style.width = '0%'; label.textContent = 'HACK'; sub.textContent = `+${fmt(tapValue(S))} per tap`; }
+    else if (S.tap === 'bar') {
+      const need = C.tapModes.bar.jobTaps;
+      fill.style.width = (S.bar.taps / need * 100) + '%';
+      label.textContent = 'HACK'; sub.textContent = `job ${S.bar.taps}/${need} · ${fmt(S.bar.value)} queued`;
+    } else {
+      const cfg = C.tapModes.jobs;
+      if (!S.job) { fill.style.width = '0%'; label.textContent = 'START HACK'; sub.textContent = `${cfg.jobDuration}s · pays ${fmt(tapValue(S) * cfg.jobTapEquivalent)}`; }
+      else {
+        const p = Math.min(1, (Date.now() - S.job.start) / (cfg.jobDuration * 1000));
+        fill.style.width = (p * 100) + '%';
+        if (p >= 1) { h.classList.add('ready'); label.textContent = 'COLLECT'; sub.textContent = fmt(S.job.value); }
+        else { h.classList.add('running'); label.textContent = 'HACKING…'; sub.textContent = `${Math.ceil(cfg.jobDuration * (1 - p))}s`; }
+      }
+    }
+  };
+  const describe = (item) => {
+    const r = roleOf(item, S.idle);
+    return r.tap ? `+<b>${fmt(r.tap)}</b>/tap each` : `+<b>${fmtRate(r.idle)}</b>/s each`;
+  };
+  const renderShop = () => {
+    const shop = $('shop'); shop.innerHTML = '';
+    for (const item of activeItems(S.idle)) {
+      const lvl = S.levels[item.id] || 0, maxed = lvl >= C.maxLevel, cost = costOf(item, lvl);
+      const el = document.createElement('div');
+      el.className = 'item' + (maxed ? ' maxed' : ''); el.dataset.id = item.id;
+      el.innerHTML = `<div class="name">${item.name}<span class="lvl">${lvl ? 'Lv' + lvl : ''}</span></div>
+        <div class="effect">${describe(item)} · ${item.desc}</div>
+        <button ${maxed ? 'disabled' : ''} data-cost="${cost}">${maxed ? 'MAXED' : 'BUY'}<span class="cost">${maxed ? '' : fmt(cost)}</span></button>`;
+      el.querySelector('button').addEventListener('click', () => buy(item));
+      shop.appendChild(el);
+    }
+    renderShopAffordability();
+  };
+  const renderShopAffordability = () => {
+    document.querySelectorAll('.item button[data-cost]').forEach((b) => {
+      if (b.textContent.startsWith('MAXED')) return;
+      b.disabled = S.money < Number(b.dataset.cost);
+    });
+  };
+  const renderTabs = () => {
+    const build = (host, modes, axis) => {
+      host.querySelectorAll('button').forEach((b) => b.remove());
+      for (const [key, m] of Object.entries(modes)) {
+        const b = document.createElement('button'); b.role = 'tab'; b.textContent = m.label;
+        b.setAttribute('aria-selected', String(S[axis] === key));
+        b.addEventListener('click', () => switchTo(axis === 'tap' ? key : S.tap, axis === 'idle' ? key : S.idle));
+        host.appendChild(b);
+      }
+    };
+    build($('tapTabs'), C.tapModes, 'tap'); build($('idleTabs'), C.idleModes, 'idle');
+    $('hint').textContent = `${C.tapModes[S.tap].hint} ${C.idleModes[S.idle].hint}`;
+  };
+  const renderAll = () => { renderTabs(); renderMoney(); renderHack(); renderShop(); drawRoom(); };
+
+  // ---------- room scene (placeholder pixel art) ----------
+  const ctx = $('room').getContext('2d');
+  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const drawRoom = () => {
+    const L = (id) => S.levels[id] || 0;
+    const W = 160, H = 90;
+    px(0, 0, W, H, '#0b1016');                 // wall
+    px(0, 62, W, 28, '#151b1a');               // floor
+    for (let x = 0; x < W; x += 16) px(x, 62, 1, 28, '#0e1312');
+    // window with city glow
+    px(112, 8, 36, 24, '#0a1a2a'); px(114, 10, 32, 20, '#123047');
+    for (let i = 0; i < 14; i++) px(116 + (i * 7) % 30, 14 + (i * 5) % 12, 1, 1, i % 3 ? '#ffd27a' : '#58ff7d');
+    px(112, 8, 36, 1, '#2d3b30'); px(112, 31, 36, 1, '#2d3b30'); px(129, 8, 1, 24, '#2d3b30');
+    // botnet: world map of blinking nodes on the wall
+    if (L('botnet')) { px(8, 6, 44, 22, '#0d1a12'); for (let i = 0; i < Math.min(40, L('botnet') * 2); i++) { const on = (Math.floor(Date.now() / 300) + i) % 4; px(10 + (i * 13) % 40, 8 + (i * 7) % 18, 1, 1, on ? '#58ff7d' : '#1f6b33'); } }
+    // desk
+    px(20, 50, 84, 4, '#4a3520'); px(22, 54, 3, 10, '#2c1f12'); px(99, 54, 3, 10, '#2c1f12');
+    // chair + hacker
+    px(58, 56, 14, 3, '#222'); px(63, 59, 4, 6, '#222');
+    px(60, 34, 10, 16, '#1c2a24');             // hoodie
+    px(62, 28, 6, 7, '#e3b58a'); px(61, 26, 8, 3, '#1c2a24'); // head + hood
+    px(56, 44, 6, 3, '#1c2a24'); px(68, 44, 6, 3, '#1c2a24'); // arms
+    // keyboard
+    px(56, 48, 18, 2, L('keyboard') ? '#58ff7d' : '#2a2a2a'); if (L('keyboard') > 10) px(56, 47, 18, 1, '#ffb64a');
+    // laptop
+    if (L('laptop')) { px(80, 48, 14, 2, '#555'); px(82, 38, 12, 10, '#333'); px(83, 39, 10, 8, '#0f2a18'); px(84, 41, 6, 1, '#58ff7d'); px(84, 43, 4, 1, '#58ff7d'); }
+    // monitors
+    if (L('monitor')) { px(42, 32, 20, 14, '#333'); px(43, 33, 18, 12, '#0f1f2a'); for (let i = 0; i < 5; i++) px(44, 35 + i * 2, 6 + (i * 5) % 9, 1, '#58ff7d'); px(50, 46, 4, 4, '#444'); }
+    if (L('monitor') >= 10) { px(64, 30, 18, 12, '#333'); px(65, 31, 16, 10, '#2a1a0f'); for (let i = 0; i < 4; i++) px(66, 33 + i * 2, 4 + (i * 7) % 9, 1, '#ffb64a'); px(71, 42, 4, 3, '#444'); }
+    // gpu tower under desk
+    if (L('gpu')) { px(26, 55, 10, 9, '#222'); for (let i = 0; i < Math.min(4, Math.ceil(L('gpu') / 7)); i++) px(28, 57 + i * 2, 6, 1, i % 2 ? '#ff5f5f' : '#58ff7d'); }
+    // server rack
+    if (L('rack')) { const n = Math.min(6, Math.ceil(L('rack') / 5)); px(136, 62 - n * 5, 18, n * 5 + 2, '#1a1f22'); for (let i = 0; i < n; i++) { px(138, 64 - n * 5 + i * 5, 14, 3, '#2a3338'); px(150, 65 - n * 5 + i * 5, 1, 1, (Math.floor(Date.now() / 400) + i) % 3 ? '#58ff7d' : '#0a0d0b'); } }
+  };
+  setInterval(() => { if (S) drawRoom(); }, 300);
+
+  // ---------- slots / overlay ----------
+  const comboTitle = (tap, idle) => `${C.tapModes[tap].label} / ${C.idleModes[idle].label}`.toUpperCase();
+  const minutes = (ms) => Math.round(ms / 60000);
+  const showOverlay = (tap, idle) => {
+    const existing = load(slotKey(tap, idle));
+    $('ovTitle').textContent = comboTitle(tap, idle);
+    const acts = $('ovActions'); acts.innerHTML = '';
+    const mk = (label, cls, fn) => { const b = document.createElement('button'); b.textContent = label; b.className = cls; b.addEventListener('click', fn); acts.appendChild(b); return b; };
+    if (existing) {
+      $('ovBody').innerHTML = `Saved run: <b>${fmt(existing.money)}</b> in the bank, <b>${minutes(existing.playedMs)} min</b> played.<br>Continue it or wipe this slot and start over.`;
+      mk('CONTINUE', 'primary', () => { start(existing); hideOverlay(); });
+      mk('NEW RUN (wipe this slot)', 'danger', () => { start(freshState(tap, idle)); hideOverlay(); });
+    } else {
+      $('ovBody').innerHTML = `${C.tapModes[tap].hint} ${C.idleModes[idle].hint}<br>No save for this combo yet.`;
+      mk('START', 'primary', () => { start(freshState(tap, idle)); hideOverlay(); });
+    }
+    if (S) mk('BACK', '', hideOverlay);
+    $('overlay').hidden = false;
+  };
+  const hideOverlay = () => { $('overlay').hidden = true; };
+
+  const applyOffline = (s) => {
+    const r = idleRate(s); if (r <= 0) return;
+    const secs = Math.min(C.offlineCapSeconds, Math.max(0, (Date.now() - s.lastSeen) / 1000));
+    const gain = r * secs * C.offlineEfficiency;
+    if (gain >= 1) { s.money += gain; s.totalEarned += gain; setTimeout(() => { pop($('tapzone').clientWidth / 2, 20, `offline +${fmt(gain)}`, true); }, 300); }
+  };
+  const start = (state) => {
+    if (S) save();
+    S = state; applyOffline(S); S.lastSeen = Date.now();
+    if (S.tap === 'jobs' && S.job && Date.now() - S.job.start < 0) S.job = null;
+    store(`ra${C.version}:last`, { tap: S.tap, idle: S.idle });
+    renderAll(); save();
+  };
+  const switchTo = (tap, idle) => { if (S && tap === S.tap && idle === S.idle) return; save(); showOverlay(tap, idle); };
+
+  // ---------- wire up ----------
+  $('hack').addEventListener('pointerdown', (e) => { e.preventDefault(); onTap(e); });
+  $('hack').addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onTap({}); } });
+  $('menuBtn').addEventListener('click', () => showOverlay(S.tap, S.idle));
+  const renderMute = () => { $('muteBtn').textContent = muted ? 'MUTED' : 'SND'; $('muteBtn').setAttribute('aria-pressed', String(muted)); };
+  $('muteBtn').addEventListener('click', () => { muted = !muted; store(`ra${C.version}:muted`, muted); renderMute(); if (!muted) beep(880, .05); });
+  renderMute();
+
+  const last = load(`ra${C.version}:last`) || { tap: C.defaultTap, idle: C.defaultIdle };
+  const saved = load(slotKey(last.tap, last.idle));
+  if (saved) start(saved);
+  else { S = freshState(last.tap, last.idle); renderAll(); showOverlay(last.tap, last.idle); }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
