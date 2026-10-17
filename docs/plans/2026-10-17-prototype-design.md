@@ -22,7 +22,8 @@ Hosted at `https://ugurkc.github.io/root-access` (GitHub Pages from `main`).
 | Variants | Always-visible tabs. **Tap mode:** Instant / Bar / Jobs. **Idle mode:** Equipment / Helpers only / None. |
 | Progress | Separate save per variant combo (9 slots), browser `localStorage`. Start screen: Continue / New run. Offline earnings on return. |
 | Session target | 30–60 min to afford everything (~level 25 each). One cost multiplier (×1.15). |
-| Equipment | Each item has one job: tap power *or* idle income; repeat purchases. |
+| Equipment | Each item has one job: tap power *or* idle income; repeat purchases. Every level occupies `footprint` floor tiles. |
+| House | Top-down isometric floor plan of square rooms drawn as diamonds. Start in the centre room; the 8 neighbours are dark. **Expand** in the shop lights the next room in a fixed order (E, W, N, S, then corners), each costing 3x the last. A room is 5x5 = 25 tiles; the start room loses 4 to the desk and chair. When no item fits, the shop shows NO SPACE. Fixed scale, the panel pans by touch or mouse drag, centred on the start room. Player sits with their back to the camera, facing the desk. |
 | Feel | Floating +$ pops, button squash + light shake, synthesized sounds (mutable). Short suffixes ($1.2K). |
 | Look | Dark pixel-art direction: black with a faint red cast, neon red for action (tap axis, money, hack button), shades of dark neon blue for systems (idle axis, screens, timers, collect), pixel font, chunky 2px borders, a stylised desk scene that gains gear as items are bought. Placeholder art, not final. |
 | Feedback | Talk to testers; no telemetry. |

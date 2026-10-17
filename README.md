@@ -17,11 +17,23 @@ Each of the 9 combinations has its own save in the phone's browser. Switching
 tabs offers *Continue* or *New run* for that slot. The **RUN** button reopens
 that choice; **SND** mutes.
 
+## House
+
+The room is a top-down isometric floor plan. You start in the centre square;
+the eight neighbours are dark until you buy **Expand** in the shop (each room
+costs 3x the last). Every equipment level takes floor tiles (`footprint` in
+`config.js`), so a full house blocks upgrades with **NO SPACE** until you
+expand. Drag or swipe the panel to look around.
+
+Saves from before this change have more gear than tiles; they simply show
+NO SPACE until the player expands.
+
 ## Tuning
 
 Everything a designer might change is in [`config.js`](config.js): items,
-base costs, cost growth, max level, variant parameters (bar length, job
-duration and payout), feel toggles, number formatting. Edit, commit, push;
+base costs, cost growth, max level, footprints, room size, room cost and
+unlock order, variant parameters (bar length, job duration and payout), feel
+toggles, number formatting. Edit, commit, push;
 GitHub Pages redeploys in about a minute. Saves store levels, not prices, so
 retuning does not wipe anyone's progress.
 

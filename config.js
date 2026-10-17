@@ -30,20 +30,35 @@ window.RA_CONFIG = {
   // Each item has ONE job. `tap` adds $ per tap, `idle` adds $ per second.
   // In Helpers mode, items with `helperModeTap` switch to tap power and only
   // items flagged `helper` keep earning passively.
+  // `footprint` is how many floor tiles each level occupies (see `rooms`).
   items: [
     { id: 'keyboard', name: 'Mech Keyboard', desc: 'Clackier keys, faster exploits.',
-      baseCost: 10,    tap: 1 },
+      baseCost: 10,    tap: 1,              footprint: 1 },
     { id: 'laptop',   name: 'Old Laptop',    desc: 'Runs scripts while you sleep.',
-      baseCost: 50,    idle: 0.5, helperModeTap: 2 },
+      baseCost: 50,    idle: 0.5, helperModeTap: 2, footprint: 1 },
     { id: 'monitor',  name: 'Second Monitor',desc: 'More terminals, more hacks.',
-      baseCost: 250,   tap: 5 },
+      baseCost: 250,   tap: 5,              footprint: 1 },
     { id: 'rack',     name: 'Server Rack',   desc: 'Hums in the corner. Earns.',
-      baseCost: 1500,  idle: 5, helperModeTap: 15 },
+      baseCost: 1500,  idle: 5, helperModeTap: 15, footprint: 2 },
     { id: 'gpu',      name: 'GPU Cluster',   desc: 'Cracks hashes by the million.',
-      baseCost: 8000,  tap: 30 },
+      baseCost: 8000,  tap: 30,             footprint: 2 },
     { id: 'botnet',   name: 'Botnet',        desc: 'Ten thousand machines work for you.',
-      baseCost: 40000, idle: 80, helper: true },
+      baseCost: 40000, idle: 80, helper: true, footprint: 1 },
   ],
+
+  // ---- House --------------------------------------------------------------
+  // Square rooms seen from above, drawn as diamonds. You start in the centre
+  // room; buying "Expand" lights the next room in `order` ([dx, dy] from the
+  // start room). Every equipment level takes `footprint` tiles, so a full
+  // house gates upgrades. 9 rooms x 25 tiles = 225, minus the desk.
+  rooms: {
+    tilesPerSide: 5,
+    deskTiles: [[1, 1], [2, 1], [3, 1], [2, 2]],  // main desk + chair, start room
+    baseCost: 500,
+    costGrowth: 3,                                // each room costs 3x the last
+    order: [[1, 0], [-1, 0], [0, -1], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]],
+    name: 'Expand', desc: 'Knock through to the next room.',
+  },
 
   // ---- Feel ---------------------------------------------------------------
   feel: {

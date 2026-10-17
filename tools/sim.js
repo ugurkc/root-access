@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Pacing simulator: a greedy player taps at TAPS_PER_SEC and always buys the
-// item with the best (effect / cost) ratio it can afford. Prints time to each
+// item with the best (effect / cost) ratio it can afford and has floor space
+// for. When nothing fits, it saves for the next room. Prints time to each
 // milestone so you can judge the 30-60 minute target without playing.
 //
 //   node tools/sim.js            # equipment idle mode
@@ -17,6 +18,10 @@ const TAPS = Number(process.argv[3] || 3);
 const DT = 1;
 
 const costOf = (it, lvl) => Math.floor(it.baseCost * Math.pow(C.costGrowth, lvl));
+const roomCost = (rooms) => Math.floor(C.rooms.baseCost * Math.pow(C.rooms.costGrowth, rooms - 1));
+const maxRooms = 1 + C.rooms.order.length;
+const roomTiles = C.rooms.tilesPerSide ** 2;
+const capacity = (rooms) => rooms * roomTiles - C.rooms.deskTiles.length;
 const roles = (it) => {
   if (idleMode === 'helpers') {
     if (it.helper) return { idle: it.idle };
@@ -27,32 +32,37 @@ const roles = (it) => {
 };
 const active = C.items.filter((it) => roles(it));
 
-let money = 0, t = 0, lv = {};
+let money = 0, t = 0, lv = {}, rooms = 1, used = 0;
 active.forEach((i) => (lv[i.id] = 0));
 const tapValue = () => C.baseTap + active.reduce((s, i) => s + (roles(i).tap || 0) * lv[i.id], 0);
 const idleRate = () => active.reduce((s, i) => s + (roles(i).idle || 0) * lv[i.id], 0);
-const firstBuy = {};
-const maxed = {};
+const firstBuy = {}, maxed = {}, roomAt = [];
 
 while (t < 4 * 3600) {
   money += (tapValue() * TAPS + idleRate()) * DT;
   t += DT;
   for (;;) {
-    let best = null, bestScore = 0;
+    let best = null, bestScore = 0, blockedBySpace = false;
     for (const it of active) {
       if (lv[it.id] >= C.maxLevel) continue;
       const cost = costOf(it, lv[it.id]);
       if (cost > money) continue;
+      if (used + (it.footprint || 0) > capacity(rooms)) { blockedBySpace = true; continue; }
       const r = roles(it);
-      const gain = (r.tap || 0) * TAPS + (r.idle || 0);
-      const score = gain / cost;
+      const score = ((r.tap || 0) * TAPS + (r.idle || 0)) / cost;
       if (score > bestScore) { best = it; bestScore = score; }
     }
-    if (!best) break;
-    money -= costOf(best, lv[best.id]);
-    lv[best.id]++;
-    if (lv[best.id] === 1) firstBuy[best.id] = t;
-    if (lv[best.id] === C.maxLevel) maxed[best.id] = t;
+    if (best) {
+      money -= costOf(best, lv[best.id]);
+      lv[best.id]++; used += best.footprint || 0;
+      if (lv[best.id] === 1) firstBuy[best.id] = t;
+      if (lv[best.id] === C.maxLevel) maxed[best.id] = t;
+      continue;
+    }
+    if (blockedBySpace && rooms < maxRooms && money >= roomCost(rooms)) {
+      money -= roomCost(rooms); rooms++; roomAt.push(t); continue;
+    }
+    break;
   }
   if (Object.keys(maxed).length === active.length) break;
 }
@@ -63,4 +73,5 @@ console.log('item        first buy   maxed');
 for (const it of active) {
   console.log(`${it.id.padEnd(11)} ${mm(firstBuy[it.id] ?? 0)}     ${maxed[it.id] != null ? mm(maxed[it.id]) : '  never'}`);
 }
-console.log(`everything maxed at ${mm(t)}  ($/tap ${tapValue()}, $/s idle ${idleRate()})`);
+console.log(`rooms bought at: ${roomAt.map(mm).join(', ') || 'none'}`);
+console.log(`everything maxed at ${mm(t)}  ($/tap ${tapValue()}, $/s idle ${idleRate()}, ${used}/${capacity(rooms)} tiles, ${rooms} rooms)`);

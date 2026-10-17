@@ -124,15 +124,24 @@
   .money .rates b { color: var(--fg); font-weight: normal; }
   .money .rates b.idle { color: var(--blue); }
 
-  /* Room scene */
+  /* House: isometric floor plan at a fixed scale; scrolls sideways */
   .room {
     position: relative;
     border: 2px solid var(--border);
     background: #05040a;
-    aspect-ratio: 16 / 9; max-width: 100%;
+    height: 304px; max-width: 100%;
     overflow: hidden;
   }
-  .room canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .roomScroll { overflow: auto; height: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none; cursor: grab; }
+  .roomScroll.dragging { cursor: grabbing; }
+  .roomScroll::-webkit-scrollbar { display: none; }
+  .room canvas { width: 768px; height: 432px; display: block; image-rendering: pixelated; }
+  .roomLabel {
+    position: absolute; left: 8px; top: 6px; pointer-events: none;
+    font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; color: var(--dim);
+    text-shadow: 0 0 4px #000;
+  }
+  .roomLabel b { color: var(--blue); font-weight: normal; }
   .room::after { /* scanlines */
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.28) 2px 3px);
@@ -196,6 +205,9 @@
   .item button:disabled { color: var(--dim); border-color: var(--border); cursor: default; }
   .item button .cost { display: block; font-family: var(--font-body); font-size: 20px; margin-top: 4px; }
   .item.maxed button { color: var(--blue); border-color: var(--blue-dim); }
+  .item.nospace button:disabled { color: var(--red-dim); border-color: var(--red-dim); }
+  .item.expand { border-color: var(--blue-dim); }
+  .item.expand button { color: var(--blue); border-color: var(--blue-dim); }
 
   footer { color: var(--dim); font-size: 15px; text-align: center; margin-top: 6px; }
 
@@ -244,7 +256,10 @@
     <div class="rates" id="rates"></div>
   </section>
 
-  <section class="room"><canvas id="room" width="160" height="90"></canvas></section>
+  <section class="room">
+    <div class="roomScroll" id="roomScroll"><canvas id="room" width="256" height="144"></canvas></div>
+    <div class="roomLabel" id="roomLabel"></div>
+  </section>
 
   <section class="tapzone" id="tapzone">
     <button class="hack" id="hack">
@@ -290,6 +305,30 @@
   const tapValue = (s) => C.baseTap + activeItems(s.idle).reduce((sum, it) => sum + (roleOf(it, s.idle).tap || 0) * (s.levels[it.id] || 0), 0);
   const idleRate = (s) => activeItems(s.idle).reduce((sum, it) => sum + (roleOf(it, s.idle).idle || 0) * (s.levels[it.id] || 0), 0);
 
+  // ---------- house layout (pure) ----------
+  // Room [rx, ry] covers world tiles [rx*SIDE, rx*SIDE+SIDE). Equipment is
+  // placed row by row into lit rooms, in purchase order of rooms.
+  const SIDE = C.rooms.tilesPerSide, ROOM_TILES = SIDE * SIDE, maxRooms = 1 + C.rooms.order.length;
+  const reserved = new Set(C.rooms.deskTiles.map(([x, y]) => `${x},${y}`));
+  const roomList = (s) => [[0, 0], ...C.rooms.order.slice(0, (s.rooms || 1) - 1)];
+  const isLit = (s, rx, ry) => roomList(s).some(([a, b]) => a === rx && b === ry);
+  const roomCost = (rooms) => Math.floor(C.rooms.baseCost * Math.pow(C.rooms.costGrowth, rooms - 1));
+  const capacity = (s) => roomList(s).length * ROOM_TILES - reserved.size;
+  const tilesUsed = (s) => activeItems(s.idle).reduce((n, it) => n + (it.footprint || 0) * (s.levels[it.id] || 0), 0);
+  const fits = (s, item) => tilesUsed(s) + (item.footprint || 0) <= capacity(s);
+  const placements = (s) => {
+    const free = [];
+    for (const [rx, ry] of roomList(s)) for (let y = 0; y < SIDE; y++) for (let x = 0; x < SIDE; x++) {
+      if (!(rx === 0 && ry === 0 && reserved.has(`${x},${y}`))) free.push([rx * SIDE + x, ry * SIDE + y]);
+    }
+    const out = []; let i = 0;
+    for (const it of activeItems(s.idle)) {
+      const n = (it.footprint || 0) * (s.levels[it.id] || 0);
+      for (let k = 0; k < n && i < free.length; k++, i++) out.push({ item: it, x: free[i][0], y: free[i][1] });
+    }
+    return out;
+  };
+
   const fmt = (n) => {
     const d = C.display;
     if (n < 1000) return d.currency + Math.floor(n);
@@ -304,7 +343,7 @@
   const load = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
   const freshState = (tap, idle) => ({
-    tap, idle, money: 0, levels: {}, totalEarned: 0, taps: 0,
+    tap, idle, money: 0, levels: {}, totalEarned: 0, taps: 0, rooms: 1,
     bar: { taps: 0, value: 0 }, job: null,
     createdAt: Date.now(), lastSeen: Date.now(), playedMs: 0,
   });
@@ -386,9 +425,16 @@
     const lvl = S.levels[item.id] || 0;
     if (lvl >= C.maxLevel) return;
     const cost = costOf(item, lvl);
-    if (S.money < cost) { denied(); return; }
+    if (S.money < cost || !fits(S, item)) { denied(); return; }
     S.money -= cost; S.levels[item.id] = lvl + 1;
     buySound(); renderAll(); save();
+  };
+  const buyRoom = () => {
+    if (S.rooms >= maxRooms) return;
+    const cost = roomCost(S.rooms);
+    if (S.money < cost) { denied(); return; }
+    S.money -= cost; S.rooms++;
+    buySound(); bigCash(); renderAll(); save();
   };
 
   // ---------- tick ----------
@@ -411,6 +457,7 @@
     $('money').textContent = fmt(S.money);
     const r = idleRate(S);
     $('rates').innerHTML = `<b>${fmt(tapValue(S))}</b>/tap` + (r > 0 ? ` · <b class="idle">${fmtRate(r)}</b>/s` : '');
+    $('roomLabel').innerHTML = `HOUSE <b>${S.rooms}/${maxRooms}</b> ROOMS · <b>${tilesUsed(S)}/${capacity(S)}</b> TILES`;
   };
   const renderHack = () => {
     const h = $('hack'), fill = $('fill'), label = $('hackLabel'), sub = $('hackSub');
@@ -438,21 +485,31 @@
   const renderShop = () => {
     const shop = $('shop'); shop.innerHTML = '';
     for (const item of activeItems(S.idle)) {
-      const lvl = S.levels[item.id] || 0, maxed = lvl >= C.maxLevel, cost = costOf(item, lvl);
+      const lvl = S.levels[item.id] || 0, maxed = lvl >= C.maxLevel, cost = costOf(item, lvl), room = fits(S, item);
       const el = document.createElement('div');
-      el.className = 'item' + (maxed ? ' maxed' : ''); el.dataset.id = item.id;
+      el.className = 'item' + (maxed ? ' maxed' : '') + (!maxed && !room ? ' nospace' : ''); el.dataset.id = item.id;
+      const label = maxed ? 'MAXED' : room ? 'BUY' : 'NO SPACE';
       el.innerHTML = `<div class="name">${item.name}<span class="lvl">${lvl ? 'Lv' + lvl : ''}</span></div>
-        <div class="effect">${describe(item)} · ${item.desc}</div>
-        <button ${maxed ? 'disabled' : ''} data-cost="${cost}">${maxed ? 'MAXED' : 'BUY'}<span class="cost">${maxed ? '' : fmt(cost)}</span></button>`;
+        <div class="effect">${describe(item)} · ${item.footprint} tile${item.footprint === 1 ? '' : 's'} · ${item.desc}</div>
+        <button ${maxed ? 'disabled' : ''} data-cost="${cost}" data-fits="${room ? 1 : 0}">${label}<span class="cost">${maxed ? '' : fmt(cost)}</span></button>`;
       el.querySelector('button').addEventListener('click', () => buy(item));
       shop.appendChild(el);
     }
+    // Expand: lights the next room
+    const full = S.rooms >= maxRooms, rc = roomCost(S.rooms);
+    const ex = document.createElement('div');
+    ex.className = 'item expand' + (full ? ' maxed' : ''); ex.dataset.id = 'expand';
+    ex.innerHTML = `<div class="name">${C.rooms.name}<span class="lvl">${S.rooms}/${maxRooms} rooms</span></div>
+      <div class="effect">+<b>${ROOM_TILES}</b> tiles · ${C.rooms.desc}</div>
+      <button ${full ? 'disabled' : ''} data-cost="${rc}" data-fits="1">${full ? 'FULL HOUSE' : 'BUILD'}<span class="cost">${full ? '' : fmt(rc)}</span></button>`;
+    ex.querySelector('button').addEventListener('click', buyRoom);
+    shop.appendChild(ex);
     renderShopAffordability();
   };
   const renderShopAffordability = () => {
     document.querySelectorAll('.item button[data-cost]').forEach((b) => {
-      if (b.textContent.startsWith('MAXED')) return;
-      b.disabled = S.money < Number(b.dataset.cost);
+      if (b.textContent.startsWith('MAXED') || b.textContent.startsWith('FULL')) return;
+      b.disabled = S.money < Number(b.dataset.cost) || b.dataset.fits === '0';
     });
   };
   const renderTabs = () => {
@@ -470,41 +527,97 @@
   };
   const renderAll = () => { renderTabs(); renderMoney(); renderHack(); renderShop(); drawRoom(); };
 
-  // ---------- room scene (placeholder pixel art) ----------
+  // ---------- house: isometric floor plan (placeholder pixel art) ----------
+  // Logical canvas 256x144 shown at 3x. A tile is a 16x8 diamond; world tile
+  // (0,0) is the back corner of the start room. Camera looks from the south,
+  // so the player (facing the desk to the north) shows us their back.
   const ctx = $('room').getContext('2d');
-  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const CW = 256, CH = 144, TW = 8, TH = 4, OX = 128, OY = 60, WALL = 14, SCALE = 3;
+  const iso = (x, y) => [OX + (x - y) * TW, OY + (x + y) * TH];
+  const path = (pts) => { ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
+  const poly = (pts, c) => { ctx.fillStyle = c; path(pts); ctx.fill(); };
+  const outline = (pts, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1; path(pts); ctx.stroke(); };
+  const line = (a, b, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
+  const quad = (x, y, w, d, z = 0) => [iso(x, y), iso(x + w, y), iso(x + w, y + d), iso(x, y + d)].map(([px, py]) => [px, py - z]);
+  // cuboid standing on tile (x, y) with a w x d tile footprint, h px tall, lifted z px
+  const box = (x, y, w, d, h, top, left, right, z = 0) => {
+    const [, b, c, l] = quad(x, y, w, d, z);
+    poly([l, c, [c[0], c[1] - h], [l[0], l[1] - h]], left);
+    poly([c, b, [b[0], b[1] - h], [c[0], c[1] - h]], right);
+    poly(quad(x, y, w, d, z + h), top);
+  };
+  const dot = (x, y, z, c, size = 1) => { const [px, py] = iso(x, y); ctx.fillStyle = c; ctx.fillRect(Math.round(px - size / 2), Math.round(py - z - size / 2), size, size); };
+  const blink = (period, phase = 0) => (Math.floor(Date.now() / period) + phase) % 3 !== 0;
+
+  // one sprite per occupied tile
+  const sprites = {
+    keyboard: (x, y) => { box(x + .15, y + .15, .7, .7, 3, '#1a1017', '#0e080c', '#140b10'); const a = iso(x + .25, y + .85), b = iso(x + .85, y + .85); line([a[0], a[1] - 3], [b[0], b[1] - 3], '#ff2e4d'); },
+    monitor:  (x, y) => { box(x + .2, y + .2, .6, .6, 5, '#4f8dff', '#1c1c1c', '#262626'); },
+    laptop:   (x, y) => { box(x + .2, y + .2, .6, .6, 4, '#3a2818', '#241810', '#2e2016'); box(x + .3, y + .3, .4, .4, 1, '#0b1636', '#111', '#1a1a1a', 4); dot(x + .5, y + .5, 6, '#4f8dff'); },
+    rack:     (x, y) => { box(x + .15, y + .15, .7, .7, 16, '#2a3338', '#161b1e', '#1e2528'); for (let i = 0; i < 4; i++) dot(x + .78, y + .62, 4 + i * 3, blink(400, i + x) ? '#ff2e4d' : '#3a0a12'); },
+    gpu:      (x, y) => { box(x + .2, y + .2, .6, .6, 9, '#202020', '#121212', '#1a1a1a'); for (let i = 0; i < 3; i++) dot(x + .75, y + .65, 3 + i * 2, i % 2 ? '#ff2e4d' : '#4f8dff'); },
+    botnet:   (x, y) => { box(x + .4, y + .4, .2, .2, 14, '#333', '#161616', '#222'); dot(x + .5, y + .5, 16, blink(300, x + y) ? '#ff2e4d' : '#4f8dff', 2); },
+  };
+
   const drawRoom = () => {
+    ctx.fillStyle = '#05040a'; ctx.fillRect(0, 0, CW, CH);
+    const all = [];
+    for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) all.push([rx, ry]);
+    all.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
+    // floors: lit rooms get a tile grid, dark rooms a faint outline
+    for (const [rx, ry] of all) {
+      const x0 = rx * SIDE, y0 = ry * SIDE, on = isLit(S, rx, ry);
+      poly(quad(x0, y0, SIDE, SIDE), on ? '#141a33' : '#0b0812');
+      if (on) for (let i = 1; i < SIDE; i++) { line(iso(x0 + i, y0), iso(x0 + i, y0 + SIDE), '#1b2342'); line(iso(x0, y0 + i), iso(x0 + SIDE, y0 + i), '#1b2342'); }
+      else outline(quad(x0, y0, SIDE, SIDE), '#1e1020');
+    }
+    // low back walls on the exterior edges of lit rooms
+    for (const [rx, ry] of all) {
+      if (!isLit(S, rx, ry)) continue;
+      const x0 = rx * SIDE, y0 = ry * SIDE, a = iso(x0, y0);
+      if (!isLit(S, rx, ry - 1)) { const b = iso(x0 + SIDE, y0); poly([a, b, [b[0], b[1] - WALL], [a[0], a[1] - WALL]], '#2a0f1a'); line([a[0], a[1] - WALL], [b[0], b[1] - WALL], '#4a1a2a'); }
+      if (!isLit(S, rx - 1, ry)) { const d = iso(x0, y0 + SIDE); poly([a, d, [d[0], d[1] - WALL], [a[0], a[1] - WALL]], '#1c0a12'); line([a[0], a[1] - WALL], [d[0], d[1] - WALL], '#3a1422'); }
+    }
+    // window with city lights on the start room's back wall, while that side is still exterior
+    if (!isLit(S, 0, -1)) {
+      const up = (x, z) => { const [px, py] = iso(x, 0); return [px, py - z]; };
+      poly([up(2.8, 11), up(4.2, 11), up(4.2, 4), up(2.8, 4)], '#0e1f52');
+      for (let i = 0; i < 7; i++) dot(2.95 + i * .18, 0, 5 + (i * 3) % 5, i % 3 ? '#4f8dff' : '#ff2e4d');
+    }
+    // objects, depth-sorted per tile (x + y); everything is one tile wide
+    const objs = [];
     const L = (id) => S.levels[id] || 0;
-    const W = 160, H = 90;
-    px(0, 0, W, H, '#0a0810');                 // wall
-    px(0, 62, W, 28, '#1a1014');               // floor
-    for (let x = 0; x < W; x += 16) px(x, 62, 1, 28, '#120a0e');
-    // window with city glow
-    px(112, 8, 36, 24, '#070f24'); px(114, 10, 32, 20, '#0e1f52');
-    for (let i = 0; i < 14; i++) px(116 + (i * 7) % 30, 14 + (i * 5) % 12, 1, 1, i % 3 ? '#4f8dff' : '#ff2e4d');
-    px(112, 8, 36, 1, '#381620'); px(112, 31, 36, 1, '#381620'); px(129, 8, 1, 24, '#381620');
-    // botnet: world map of blinking nodes on the wall
-    if (L('botnet')) { px(8, 6, 44, 22, '#0a0f22'); for (let i = 0; i < Math.min(40, L('botnet') * 2); i++) { const on = (Math.floor(Date.now() / 300) + i) % 4; px(10 + (i * 13) % 40, 8 + (i * 7) % 18, 1, 1, on ? '#ff2e4d' : '#7a1228'); } }
-    // desk
-    px(20, 50, 84, 4, '#4a3520'); px(22, 54, 3, 10, '#2c1f12'); px(99, 54, 3, 10, '#2c1f12');
-    // chair + hacker
-    px(58, 56, 14, 3, '#222'); px(63, 59, 4, 6, '#222');
-    px(60, 34, 10, 16, '#131a30');             // hoodie
-    px(62, 28, 6, 7, '#e3b58a'); px(61, 26, 8, 3, '#131a30'); // head + hood
-    px(56, 44, 6, 3, '#131a30'); px(68, 44, 6, 3, '#131a30'); // arms
-    // keyboard
-    px(56, 48, 18, 2, L('keyboard') ? '#ff2e4d' : '#2a2a2a'); if (L('keyboard') > 10) px(56, 47, 18, 1, '#4f8dff');
-    // laptop
-    if (L('laptop')) { px(80, 48, 14, 2, '#555'); px(82, 38, 12, 10, '#333'); px(83, 39, 10, 8, '#0b1636'); px(84, 41, 6, 1, '#4f8dff'); px(84, 43, 4, 1, '#4f8dff'); }
-    // monitors
-    if (L('monitor')) { px(42, 32, 20, 14, '#333'); px(43, 33, 18, 12, '#0b1636'); for (let i = 0; i < 5; i++) px(44, 35 + i * 2, 6 + (i * 5) % 9, 1, '#4f8dff'); px(50, 46, 4, 4, '#444'); }
-    if (L('monitor') >= 10) { px(64, 30, 18, 12, '#333'); px(65, 31, 16, 10, '#2a0a12'); for (let i = 0; i < 4; i++) px(66, 33 + i * 2, 4 + (i * 7) % 9, 1, '#ff2e4d'); px(71, 42, 4, 3, '#444'); }
-    // gpu tower under desk
-    if (L('gpu')) { px(26, 55, 10, 9, '#222'); for (let i = 0; i < Math.min(4, Math.ceil(L('gpu') / 7)); i++) px(28, 57 + i * 2, 6, 1, i % 2 ? '#ff2e4d' : '#4f8dff'); }
-    // server rack
-    if (L('rack')) { const n = Math.min(6, Math.ceil(L('rack') / 5)); px(136, 62 - n * 5, 18, n * 5 + 2, '#1a1f22'); for (let i = 0; i < n; i++) { px(138, 64 - n * 5 + i * 5, 14, 3, '#2a3338'); px(150, 65 - n * 5 + i * 5, 1, 1, (Math.floor(Date.now() / 400) + i) % 3 ? '#ff2e4d' : '#090609'); } }
+    const monitors = Math.min(3, 1 + Math.floor(L('monitor') / 10));
+    [1, 2, 3].forEach((x, i) => objs.push({ d: x + 1, f: () => {
+      box(x, 1.1, 1, .8, 7, '#4a3520', '#2c1f12', '#3a2818');                      // desk segment
+      if (i < monitors) {                                                            // monitor back, blue rim
+        box(x + .2, 1.15, .6, .12, 6, '#0b1636', '#1c1c1c', '#262626', 7);
+        const a = iso(x + .2, 1.15), b = iso(x + .8, 1.15); line([a[0], a[1] - 13], [b[0], b[1] - 13], '#4f8dff');
+      }
+      if (x === 2 && L('keyboard')) { const a = iso(2.25, 1.85), b = iso(2.75, 1.85); line([a[0], a[1] - 7], [b[0], b[1] - 7], '#ff2e4d'); }
+    } }));
+    objs.push({ d: 4, f: () => {                                                     // player on the chair, hood up
+      box(2.3, 2.3, .4, .4, 3, '#1a1a1a', '#0e0e0e', '#141414');
+      box(2.3, 2.3, .4, .4, 9, '#131a30', '#0c1020', '#101628', 3);
+      box(2.36, 2.36, .28, .28, 4, '#1b2440', '#0c1020', '#101628', 12);
+    } });
+    for (const p of placements(S)) objs.push({ d: p.x + p.y, f: () => (sprites[p.item.id] || sprites.laptop)(p.x, p.y) });
+    objs.sort((a, b) => a.d - b.d).forEach((o) => o.f());
   };
   setInterval(() => { if (S) drawRoom(); }, 300);
+  // centre the view on the start room; phones pan by touch, mice by dragging
+  const centerHouse = () => {
+    const sc = $('roomScroll'), [cx, cy] = iso(SIDE / 2, SIDE / 2);
+    sc.scrollLeft = cx * SCALE - sc.clientWidth / 2; sc.scrollTop = cy * SCALE - sc.clientHeight / 2;
+  };
+  window.addEventListener('resize', centerHouse);
+  (() => {
+    const sc = $('roomScroll'); let drag = null;
+    sc.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') return; drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop }; sc.classList.add('dragging'); sc.setPointerCapture(e.pointerId); });
+    sc.addEventListener('pointermove', (e) => { if (!drag) return; sc.scrollLeft = drag.l - (e.clientX - drag.x); sc.scrollTop = drag.t - (e.clientY - drag.y); });
+    const end = () => { drag = null; sc.classList.remove('dragging'); };
+    sc.addEventListener('pointerup', end); sc.addEventListener('pointercancel', end);
+  })();
 
   // ---------- slots / overlay ----------
   const comboTitle = (tap, idle) => `${C.tapModes[tap].label} / ${C.idleModes[idle].label}`.toUpperCase();
@@ -535,10 +648,10 @@
   };
   const start = (state) => {
     if (S) save();
-    S = state; applyOffline(S); S.lastSeen = Date.now();
+    S = state; S.rooms = S.rooms || 1; applyOffline(S); S.lastSeen = Date.now();
     if (S.tap === 'jobs' && S.job && Date.now() - S.job.start < 0) S.job = null;
     store(`ra${C.version}:last`, { tap: S.tap, idle: S.idle });
-    renderAll(); save();
+    renderAll(); centerHouse(); save();
   };
   const switchTo = (tap, idle) => { if (S && tap === S.tap && idle === S.idle) return; save(); showOverlay(tap, idle); };
 
