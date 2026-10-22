@@ -2,14 +2,7 @@
 
 A phone-first idle clicker about hacking from a bedroom. This document describes the game as it currently exists so that anyone can continue the work from it. Every number is copied from the source; when the source and this file disagree, the source wins and this file should be updated.
 
-## 1. Form factor
-
-- One self-contained HTML file: markup, CSS and the game script together, no build step, no dependencies beyond Google Fonts. It can be hosted on any static server and runs offline once loaded.
-- Portrait, one column, sized for a phone; it also runs in a desktop browser. Home-screen meta tags let it run full-screen when added to a phone's home screen.
-- Progress is saved in the browser's `localStorage` (section 5). There is no server and no account.
-- The save is written every 3 seconds and on `pagehide`, so editing the save from the game page itself is overwritten on reload. To seed or clear a save for testing, edit `localStorage` from another page on the same origin, then navigate back.
-
-## 2. Core loop
+## 1. Core loop
 
 ### Credits, taps, the HACK bar
 - Currency is credits (`$`). Display uses `fmt`: K, M, B, T, Qa, Qi, Sx, Sp.
@@ -54,7 +47,7 @@ Formulas:
 ### Offline earnings
 - On load or when a tick gap exceeds 60 s, `simulateOffline(min(away, OFFLINE_CAP))` runs the rigged jobs in 1 s steps. `OFFLINE_CAP = 8 h`; the modal says so when the absence was longer.
 
-## 3. The room
+## 2. The room
 
 An isometric bedroom drawn as SVG, rasterised to a small canvas and scaled up with hard pixels. Six fixed slots:
 
@@ -105,17 +98,17 @@ Multipliers (all multiplicative across placed items):
 ### Decor events
 - Every `EV_MIN…EV_MAX = 60…120 s` (first one 15 s after placing decor) one placed decor item asks for attention for `EV_WINDOW = 20 s`. Tapping the item or the bubble accepts it and adds the item's `boost` comfort for `dur` seconds on top of the permanent comfort. An item with an active boost does not ask again until it expires. Tapping an item with a pending event accepts the event instead of opening its sheet.
 
-## 4. UI contract
+## 3. UI contract
 
 Layout is one phone column: thin HUD (credits, +$/s over the last 15 s, rep bar to the next job, comfort bar with boost overlay, pay multiplier, settings gear), the room, the HACK button with its 10-segment bar and sub-line, then the JOBS dock (collapsible; its summary reads "n running · m auto", "idle", or "UPGRADE READY" when collapsed and something is affordable).
 
-Each job row: ring (NEW / RUN / job code / AUTO, with progress), name and level, pay · time left · "2× at L25", the rig guide line (section 2), and the LEVEL UP / UNLOCK JOB / MAXED button with cost. Rows that are ready to run get `data-run` so a tap anywhere on them starts the job.
+Each job row: ring (NEW / RUN / job code / AUTO, with progress), name and level, pay · time left · "2× at L25", the rig guide line (section 1), and the LEVEL UP / UNLOCK JOB / MAXED button with cost. Rows that are ready to run get `data-run` so a tap anywhere on them starts the job.
 
 Sheets (bottom panels, one at a time): empty slot chooser, placed item (effect, upgrade row), rack (shelves), settings (playtest counters, Wipe save). Toasts for purchases and milestones. Money pops over the room; a shake and "BONUS +$… · ×1.25 SPEED" pop on a full bar.
 
 All click actions are `data-action="<verb>:<arg>"`, parsed on the **first** colon only (item keys like `rig:wifi` contain one). Verbs: hack, dock, event, buyx, run, up, buy, upitem, shelf, openslot, closesheets, settings, reset, restart, close.
 
-## 5. Save format
+## 4. Save format
 
 `localStorage['root-idle-v4']` (`SAVE_KEY`), JSON of the state `S`:
 
