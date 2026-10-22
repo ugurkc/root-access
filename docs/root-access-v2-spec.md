@@ -6,18 +6,10 @@ A phone-first idle clicker about hacking from a bedroom. This document describes
 
 - One self-contained HTML file: markup, CSS and the game script together, no build step, no dependencies beyond Google Fonts. It can be hosted on any static server and runs offline once loaded.
 - Portrait, one column, sized for a phone; it also runs in a desktop browser. Home-screen meta tags let it run full-screen when added to a phone's home screen.
-- Progress is saved in the browser's `localStorage` (section 6). There is no server and no account.
+- Progress is saved in the browser's `localStorage` (section 5). There is no server and no account.
 - The save is written every 3 seconds and on `pagehide`, so editing the save from the game page itself is overwritten on reload. To seed or clear a save for testing, edit `localStorage` from another page on the same origin, then navigate back.
 
-## 2. Design intent
-
-- Phone-first idle clicker about hacking from a bedroom. One dark theme by choice.
-- Tuned for a **7-day idle curve**: the player should feel the benefit of tapping and of coming back at the same time. Each day should have a next purchase that overnight earnings roughly pay for, and a session of tapping should earn about what the night did.
-- Design targets for the test build: median first session ≥ 10 min, 25th percentile ≥ 4 min, first upgrade ≤ 90 s, ≥ 60% of testers say they would reopen the game. The settings panel asks testers for screenshots on day 1, 3 and 7.
-- Money must keep meaning: nothing scales forever (jobs cap at 25, items at 25), the room is cramped, and space is a real constraint.
-- Simulated pacing with the current numbers (greedy player; "active" = 12 min day 1 then three short sessions a day at 2.5 taps/s, "casual" = 8 min then one 5 min session a day): first level-up in seconds, Wi-Fi rig at about minute 1 of the first session, CEO rig around minute 9 for active players, then roughly one rig and one item per day, satellite rig on day 5–7. Prices were lowered a little after that run, so expect everything slightly earlier. The simulator only modelled the formulas below; the numbers are not yet validated with testers.
-
-## 3. Core loop
+## 2. Core loop
 
 ### Credits, taps, the HACK bar
 - Currency is credits (`$`). Display uses `fmt`: K, M, B, T, Qa, Qi, Sx, Sp.
@@ -62,7 +54,7 @@ Formulas:
 ### Offline earnings
 - On load or when a tick gap exceeds 60 s, `simulateOffline(min(away, OFFLINE_CAP))` runs the rigged jobs in 1 s steps. `OFFLINE_CAP = 8 h`; the modal says so when the absence was longer.
 
-## 4. The room
+## 3. The room
 
 An isometric bedroom drawn as SVG, rasterised to a small canvas and scaled up with hard pixels. Six fixed slots:
 
@@ -113,17 +105,17 @@ Multipliers (all multiplicative across placed items):
 ### Decor events
 - Every `EV_MIN…EV_MAX = 60…120 s` (first one 15 s after placing decor) one placed decor item asks for attention for `EV_WINDOW = 20 s`. Tapping the item or the bubble accepts it and adds the item's `boost` comfort for `dur` seconds on top of the permanent comfort. An item with an active boost does not ask again until it expires. Tapping an item with a pending event accepts the event instead of opening its sheet.
 
-## 5. UI contract
+## 4. UI contract
 
 Layout is one phone column: thin HUD (credits, +$/s over the last 15 s, rep bar to the next job, comfort bar with boost overlay, pay multiplier, settings gear), the room, the HACK button with its 10-segment bar and sub-line, then the JOBS dock (collapsible; its summary reads "n running · m auto", "idle", or "UPGRADE READY" when collapsed and something is affordable).
 
-Each job row: ring (NEW / RUN / job code / AUTO, with progress), name and level, pay · time left · "2× at L25", the rig guide line (section 3), and the LEVEL UP / UNLOCK JOB / MAXED button with cost. Rows that are ready to run get `data-run` so a tap anywhere on them starts the job.
+Each job row: ring (NEW / RUN / job code / AUTO, with progress), name and level, pay · time left · "2× at L25", the rig guide line (section 2), and the LEVEL UP / UNLOCK JOB / MAXED button with cost. Rows that are ready to run get `data-run` so a tap anywhere on them starts the job.
 
 Sheets (bottom panels, one at a time): empty slot chooser, placed item (effect, upgrade row), rack (shelves), settings (playtest counters, Wipe save). Toasts for purchases and milestones. Money pops over the room; a shake and "BONUS +$… · ×1.25 SPEED" pop on a full bar.
 
 All click actions are `data-action="<verb>:<arg>"`, parsed on the **first** colon only (item keys like `rig:wifi` contain one). Verbs: hack, dock, event, buyx, run, up, buy, upitem, shelf, openslot, closesheets, settings, reset, restart, close.
 
-## 6. Save format
+## 5. Save format
 
 `localStorage['root-idle-v4']` (`SAVE_KEY`), JSON of the state `S`:
 
@@ -140,11 +132,3 @@ m:       { first, sessions, days[], taps, lastSession, bars }   // playtest coun
 ```
 
 Compatibility rules in `load()`: unknown item keys and job ids are dropped, job levels above 25 are clamped, item levels above 25 are clamped, missing `itemLv`/`bars` default. A save from before racks can have `fixer: true` with no rig in any slot; the job keeps running on its own and simply has no sprite. The key has never been bumped so testers keep progress across every tuning round.
-
-## 7. Open questions and known gaps
-
-- No way to move or sell items; a player who fills all three floor slots with towers can never place a rack (and so never automate). Current stance: it is a real choice, keep it, but watch tester feedback.
-- Pre-rack saves with automation but no rig sprite (section 6).
-- The 7-day numbers come from a formula simulator, not from testers.
-- Ideas discussed but not in this build: bandwidth / trace / fatigue limiter systems, family friction events, factions, a moving-out fund as the big savings goal, exploits as job-unlock costs.
-- Telemetry is local only (the settings panel); a real test wants session events and a day-1 return signal.
