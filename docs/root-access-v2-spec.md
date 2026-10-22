@@ -1,29 +1,21 @@
-# Root Access v2 — mechanics and specification
+# Root Access — mechanics and specification
 
-State of the published prototype as of 2026-10-22 (ugurkc/ugurkc.github.io `main` at dd22708, after PRs #3 and #4). Written for agents continuing the work. Every number here is copied from the source; when the source and this file disagree, the source wins and this file should be updated.
+A phone-first idle clicker about hacking from a bedroom. This document describes the game as it currently exists so that anyone can continue the work from it. Every number is copied from the source; when the source and this file disagree, the source wins and this file should be updated.
 
-## 1. Where things live
+## 1. Form factor
 
-| What | Where |
-|---|---|
-| Live game | https://ugurkc.github.io/root-access-v2/ (unlisted, `noindex`) |
-| Source | `public/root-access-v2/index.html` in repo `ugurkc/ugurkc.github.io` — one self-contained HTML file, no build step for the game itself |
-| Deploy | The repo's Astro site; `.github/workflows/deploy.yml` runs `npm test` + `npm run build` and publishes `dist/` on every push to `main`. `public/` is copied verbatim, so the deployed file is byte-identical to the source |
-| Working copy | Git worktree `/Users/ugurkoc/repos/ugurkc.github.io/.worktrees/root-access-v2`, branch `root-access-v2-changes`. The main clone of that repo stays on the owner's own branch; do not switch it |
-| Local serve | From this repo: `.claude/launch.json` entry `root-access-v2` (python `http.server` on 8788 serving the worktree's `public/`); open http://localhost:8788/root-access-v2/ |
-| Ship | Commit on the worktree branch, push, `gh pr create --base main`; merge triggers the deploy. There is no CI on pull requests, so run `npm test` (27 tests, none cover the game) and `npm run build` locally and say so in the PR |
-| This repo | `ugurkc/root-access` is the older design bench (`index.html` + `config.js`, deployed at /root-access/). It is a different build; only `docs/` here relates to v2 |
-| Design docs | Gate doc (targets, Turkish): https://claude.ai/artifact/3srWUYPuJfGGiPjqVY3X4C. Holy Trifecta deck (Unity slice systems, not in v2): https://claude.ai/artifact/QY9hn8Vk14xMzP6qM5xq2s. Original artifact export of the game: https://claude.ai/artifact/TE41Ji3nXgN8JAtxkaS3EE |
-
-Testing a save in a browser: the game writes `localStorage` on `pagehide` and every 3 s, so seeding or clearing the save from the game page is overwritten on reload. Navigate to another page on the same origin (e.g. `/robots.txt`), edit `localStorage['root-idle-v4']` there, then navigate back.
+- One self-contained HTML file: markup, CSS and the game script together, no build step, no dependencies beyond Google Fonts. It can be hosted on any static server and runs offline once loaded.
+- Portrait, one column, sized for a phone; it also runs in a desktop browser. Home-screen meta tags let it run full-screen when added to a phone's home screen.
+- Progress is saved in the browser's `localStorage` (section 6). There is no server and no account.
+- The save is written every 3 seconds and on `pagehide`, so editing the save from the game page itself is overwritten on reload. To seed or clear a save for testing, edit `localStorage` from another page on the same origin, then navigate back.
 
 ## 2. Design intent
 
 - Phone-first idle clicker about hacking from a bedroom. One dark theme by choice.
 - Tuned for a **7-day idle curve**: the player should feel the benefit of tapping and of coming back at the same time. Each day should have a next purchase that overnight earnings roughly pay for, and a session of tapping should earn about what the night did.
-- Gate doc targets for the slice: median first session ≥ 10 min, P25 ≥ 4 min, first upgrade ≤ 90 s, ≥ 60% "would reopen". The settings panel asks testers for screenshots on day 1, 3 and 7.
+- Design targets for the test build: median first session ≥ 10 min, 25th percentile ≥ 4 min, first upgrade ≤ 90 s, ≥ 60% of testers say they would reopen the game. The settings panel asks testers for screenshots on day 1, 3 and 7.
 - Money must keep meaning: nothing scales forever (jobs cap at 25, items at 25), the room is cramped, and space is a real constraint.
-- Simulated pacing with the current numbers (greedy player; "active" = 12 min day 1 then three short sessions a day at 2.5 taps/s, "casual" = 8 min then one 5 min session a day): first level-up in seconds, Wi-Fi rig at about minute 1 of the first session, CEO rig around minute 9 for active players, then roughly one rig and one item per day, satellite rig on day 5–7. Prices were lowered after this sim (PR #4), so expect everything slightly earlier. The simulator lived in a session scratchpad and is not in any repo; it modelled the formulas below.
+- Simulated pacing with the current numbers (greedy player; "active" = 12 min day 1 then three short sessions a day at 2.5 taps/s, "casual" = 8 min then one 5 min session a day): first level-up in seconds, Wi-Fi rig at about minute 1 of the first session, CEO rig around minute 9 for active players, then roughly one rig and one item per day, satellite rig on day 5–7. Prices were lowered a little after that run, so expect everything slightly earlier. The simulator only modelled the formulas below; the numbers are not yet validated with testers.
 
 ## 3. Core loop
 
@@ -153,6 +145,6 @@ Compatibility rules in `load()`: unknown item keys and job ids are dropped, job 
 
 - No way to move or sell items; a player who fills all three floor slots with towers can never place a rack (and so never automate). Current stance: it is a real choice, keep it, but watch tester feedback.
 - Pre-rack saves with automation but no rig sprite (section 6).
-- The 7-day numbers come from a formula simulator, not from testers. The gate doc's open question about currency thresholds is answered by this tuning but not yet validated.
-- Not in v2 and out of scope unless asked: the Unity slice's bandwidth / trace / fatigue systems, family friction events, factions, moving fund, exploits as job-unlock costs.
-- Telemetry is local only (the settings panel); the gate doc wants session events and a day-1 return signal.
+- The 7-day numbers come from a formula simulator, not from testers.
+- Ideas discussed but not in this build: bandwidth / trace / fatigue limiter systems, family friction events, factions, a moving-out fund as the big savings goal, exploits as job-unlock costs.
+- Telemetry is local only (the settings panel); a real test wants session events and a day-1 return signal.
