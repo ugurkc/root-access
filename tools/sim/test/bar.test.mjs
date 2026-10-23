@@ -92,13 +92,13 @@ test('the offline module counts gaps and how much of them the 8 h cap cut off', 
   assert.equal(s.credits, 0);
 });
 
-test('default modules are taps, bar, jobs, offline', () => {
-  assert.deepEqual(defaultModules().map((m) => m.id), ['taps', 'bar', 'jobs', 'offline']);
+test('default modules are taps, bar, jobs, rigs, racks, items, events, offline', () => {
+  assert.deepEqual(defaultModules().map((m) => m.id), ['taps', 'bar', 'jobs', 'rigs', 'racks', 'items', 'events', 'offline']);
 });
 
 test('over two days the offline module sees three gaps and earns nothing', () => {
   const full = run({ config: cfg, profile: active, days: 2 });
-  const noOfflineMod = run({ config: cfg, profile: active, days: 2, modules: [taps, bar, jobs] });
+  const noOfflineMod = run({ config: cfg, profile: active, days: 2, modules: defaultModules().filter((m) => m.id !== 'offline') });
   assert.equal(full.metrics['offline.gaps'], 3);
   const [first, second] = sessionsFor(active, 2);
   const firstGap = second.start - (first.start + first.minutes * 60);   // 20:12 → 08:00, over the 8 h cap

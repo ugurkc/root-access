@@ -5,6 +5,7 @@
 //   advanceRunning(state, seconds)  push every running job's work along (taps, bar)
 //   setRigged(state, id, rigName)   mark a job as automated (rigs)
 //   isRigged(state, id)             read that mark (rigs, racks)
+//   levelOf(state, id)              the job's level; ≥ 1 means unlocked (rigs)
 // Exported helpers take `cfg` explicitly so a test can hand them any config.
 import { offlineCapSeconds } from './offline.mjs';
 
@@ -64,6 +65,10 @@ export function setRigged(state, id, rigName) {
 
 export function isRigged(state, id) {
   return state.jobs.byId[id].rigged;
+}
+
+export function levelOf(state, id) {
+  return state.jobs.byId[id].lv;
 }
 
 const unlocked = (state, job) => state.jobs.rep >= job.unlock || state.jobs.byId[job.id].lv > 0;

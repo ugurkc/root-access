@@ -37,15 +37,20 @@
 //     t,                                simulated seconds since the first session began (gaps included)
 //     policy }                          the profile's buying policy
 //
-// Intended order once the modules exist: taps, bar, jobs, rigs, racks, items, events, offline.
+// Order: taps, bar, jobs, rigs, racks, items, events, offline.
 // bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
 import { taps } from './mods/taps.mjs';
 import { bar } from './mods/bar.mjs';
 import { jobs } from './mods/jobs.mjs';
+import { rigs } from './mods/rigs.mjs';
+import { racks } from './mods/racks.mjs';
+import { items } from './mods/items.mjs';
+import { events } from './mods/events.mjs';
 import { offline } from './mods/offline.mjs';
 
 // taps before bar so the bar counts this tick's taps; bar before jobs so a boost reaches job work
 // as early as possible (the core collects multipliers() before the tick, so from the next tick on).
+// rigs, racks, items, events and offline have no tick effect of their own and are order-agnostic.
 export function defaultModules() {
-  return [taps, bar, jobs, offline];
+  return [taps, bar, jobs, rigs, racks, items, events, offline];
 }
