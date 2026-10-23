@@ -1,0 +1,15 @@
+{
+  "id": "casual",
+  "sessions": {
+    "day1": { "hour": 20, "minutes": 8, "tps": 1.5 },
+    "later": [
+      { "hour": 21, "minutes": 5, "tps": 1.5 }
+    ]
+  },
+  "policy": {
+    "saveForBigWithinMinutes": 30,
+    "bigValueRatio": 1.5,
+    "buyRigsWhenAffordable": true,
+    "restartManualJobs": true
+  }
+}

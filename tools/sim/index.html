@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0708">
+<title>Root Access balance simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<link rel="stylesheet" href="./ui/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous"></script>
+</head>
+<body>
+<header>
+  <h1>BALANCE SIM</h1>
+  <span class="preset">preset <b id="preset-name">loading…</b></span>
+  <div class="toolbar">
+    <button id="reset" type="button">Reset to preset</button>
+    <label class="file-button">Import JSON<input id="import" type="file" accept=".json,.js,application/json,text/javascript"></label>
+    <button id="export-json" type="button">Export JSON</button>
+    <button id="export-js" type="button">Export config.js</button>
+  </div>
+  <span class="status"><span id="error-count" class="badge">…</span></span>
+</header>
+<main>
+  <p id="notice" class="error-box" role="alert" hidden></p>
+  <section id="editor-section">
+    <h2>CONFIG</h2>
+    <ul id="other-errors" class="other-errors" hidden></ul>
+    <div id="editor"></div>
+  </section>
+  <section id="run-section">
+    <h2>RUN</h2>
+    <div class="run-controls">
+      <label for="profiles">profiles</label>
+      <select id="profiles" multiple></select>
+      <label for="days">days</label>
+      <input id="days" type="number" min="1" max="90" step="1" value="7">
+      <div class="actions">
+        <button id="run" class="primary" type="button" disabled>Run</button>
+        <span id="run-note" class="note"></span>
+      </div>
+    </div>
+    <div id="results"><p class="empty">No run yet.</p></div>
+  </section>
+  <section id="analysis-section">
+    <h2>CHARTS</h2>
+    <div id="charts" class="panel"><p class="empty">Run to see credits and passive income over time.</p></div>
+
+    <h2>TARGETS <span id="targets-badge" class="badge"></span></h2>
+    <div class="panel">
+      <div class="toolbar">
+        <button id="targets-add" type="button">+ target</button>
+        <label class="file-button">Import targets<input id="targets-import" type="file" accept=".json,application/json"></label>
+        <button id="targets-export" type="button">Export targets</button>
+        <button id="targets-reset" type="button" title="back to the default targets file">Reset targets</button>
+      </div>
+      <ul id="targets-errors" class="other-errors" hidden></ul>
+      <div class="table-wrap"><table id="targets-table" class="targets-table"></table></div>
+      <datalist id="metric-list"></datalist>
+    </div>
+
+    <h2>SWEEP</h2>
+    <div class="panel">
+      <div class="sweep-controls">
+        <label for="sweep-path">param</label>
+        <input id="sweep-path" type="text" list="sweep-paths" placeholder="jobs.list[wifi].cost" spellcheck="false">
+        <label for="sweep-values">values</label>
+        <input id="sweep-values" type="text" placeholder="500,1000,2000" spellcheck="false">
+        <label for="sweep-path2">param 2 <span class="opt">?</span></label>
+        <input id="sweep-path2" type="text" list="sweep-paths" placeholder="optional" spellcheck="false">
+        <label for="sweep-values2">values 2 <span class="opt">?</span></label>
+        <input id="sweep-values2" type="text" placeholder="optional" spellcheck="false">
+        <label for="sweep-days">days</label>
+        <input id="sweep-days" type="number" min="1" max="90" step="1" value="7">
+        <div class="actions">
+          <button id="sweep-run" class="primary" type="button">Run sweep</button>
+          <span id="sweep-note" class="note"></span>
+        </div>
+      </div>
+      <datalist id="sweep-paths"></datalist>
+      <div id="sweep-results"><p class="empty">Runs every combination with the selected profiles and the targets above.</p></div>
+    </div>
+  </section>
+</main>
+<script type="module" src="./ui/app.mjs"></script>
+</body>
+</html>

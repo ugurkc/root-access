@@ -1,0 +1,4 @@
+{
+  "presets": ["v2-2026-10-23.json"],
+  "profiles": ["active.json", "casual.json"]
+}

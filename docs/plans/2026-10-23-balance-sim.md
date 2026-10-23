@@ -34,7 +34,7 @@ test('core module loads', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `node --test tools/sim/test/`
+Run: `npm test` (Node 22 needs the glob form `node --test 'tools/sim/test/*.test.mjs'`; a bare directory is treated as a script to run.)
 Expected: FAIL, cannot find module `../model/core.mjs`.
 
 **Step 3: Minimal implementation**
@@ -45,7 +45,7 @@ Expected: FAIL, cannot find module `../model/core.mjs`.
   "name": "root-access-tools",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tools/sim/test/" }
+  "scripts": { "test": "node --test 'tools/sim/test/*.test.mjs'" }
 }
 ```
 
@@ -191,7 +191,7 @@ Profiles:
 // tools/sim/profiles/active.json
 { "id": "active", "sessions": { "day1": { "hour": 20, "minutes": 12, "tps": 2.5 },
   "later": [ { "hour": 8, "minutes": 5, "tps": 2.5 }, { "hour": 13, "minutes": 3, "tps": 2.5 }, { "hour": 21, "minutes": 8, "tps": 2.5 } ] },
-  "policy": { "greedy": true, "saveForBigWithinMinutes": 30, "bigValueRatio": 1.5, "buyRigsWhenAffordable": true, "restartManualJobs": true } }
+  "policy": { "saveForBigWithinMinutes": 30, "bigValueRatio": 1.5, "buyRigsWhenAffordable": true, "restartManualJobs": true } }
 ```
 `casual.json`: day1 `{ hour 20, minutes 8, tps 1.5 }`, later `[ { hour 21, minutes 5, tps 1.5 } ]`, same policy.
 
@@ -201,11 +201,11 @@ Core API (export from `core.mjs`):
 export function run({ config, profile, days = 7, modules = defaultModules() }) → { summary, timeline, metrics, final }
 ```
 - Builds the session list from the profile for `days`.
-- `state = { t, day, credits: 0, log: [] }`; each module's `init(state, config)`.
+- `state = { t, day, credits: 0 }`; each module's `init(state, config, profile)`. Events go into the `timeline` returned by `run`, not into state.
 - For each session: if a gap preceded it, call `offline(state, gapSeconds, ctx)` on modules that implement it and record `{ kind: 'offline', earned }`. Then loop in `dt = 1 / tps` steps: `ctx = collectMultipliers(modules, state)`, each module `tick(state, dt, ctx)`, once per simulated second run `shop(state, ctx)`.
-- `shop`: gather `offers` from all modules, apply the profile policy: rigs first when affordable (if enabled), then best `gainPerSec / cost` affordable offer unless a bigger offer within reach (`cost ≤ credits + effectiveIncome × saveForBigWithinMinutes × 60`) has `value > best × bigValueRatio`; repeat up to 300 times per second.
+- `shop`: gather `offers` from all modules, apply the profile policy: rigs first when affordable (if enabled), then best `gainPerSec / cost` affordable offer unless a bigger offer within reach (`cost ≤ credits + effectiveIncome × saveForBigWithinMinutes × 60`) has `value > best × bigValueRatio`; repeat up to 300 times per second. The core deducts the cost from `state.credits`; a module's `buy(state, offerId)` only applies the effect.
 - `summary`: one row per day with active minutes, end credits, end passive income, offline earned, active earned, purchases list.
-- `metrics`: merged from each module's `metrics(state)` plus core ones: `firstEvent:<kind>` seconds of active play, `purchasesPerDay` array, `credits.final`, `income.final`.
+- `metrics`: merged from each module's `metrics(state)` plus core ones: `firstEvent:<kind>` seconds of active play, `purchasesPerDay` array, `credits.final`, `offersLeft.final`.
 
 `registry.mjs`: `defaultModules()` returns the ordered module list (filled in as modules are added; for now returns `[]`).
 
@@ -233,7 +233,7 @@ test('a stub module earns per tick and the shop buys its offer', () => {
     id: 'stub', init: s => { s.stub = { lv: 0 }; },
     tick: (s, dt) => { s.credits += 10 * dt; },
     offers: s => s.stub.lv < 1 ? [{ id: 'stub:lv', cost: 5, gainPerSec: 1, kind: 'level' }] : [],
-    buy: (s) => { s.credits -= 5; s.stub.lv = 1; },
+    buy: (s) => { s.stub.lv = 1; },
     metrics: s => ({ 'stub.lv': s.stub.lv }),
   };
   const r = run({ config: { schema: 1 }, profile: active, days: 1, modules: [stub] });
@@ -306,9 +306,9 @@ test('first level-up happens within 90 s of active play', () => {
 - Modify: `tools/sim/model/registry.mjs`
 - Test: `tools/sim/test/bar.test.mjs`
 
-Bar: every `steps` taps pay `bonusTaps × tapMoney` and push a speed boost `{ until: t + speedDur }`; `speedMult` contribution `1 + speed × activeBoosts`; boosts clear on offline. Offline: for a gap, earn `passiveIncome × min(gap, capHours×3600)` and add rep for rigged jobs; record `{ kind: 'offline', earned, capped }`.
+Bar: every `steps` taps pay `bonusTaps × tapMoney` (import `tapMoney` from `mods/taps.mjs`) and push a speed boost `{ until: t + speedDur }`; `speedMult` contribution `1 + speed × activeBoosts`. `multipliers(state)` must be time-aware: a boost counts only while `state.t < until`. Boosts active at session end are cleared before offline earnings are computed: the core rebuilds the ctx per module in the gap loop, so `bar.offline()` (earlier in registry order) empties the stack before `jobs.offline()` reads `speedMult`. Offline: credits and rep while away are earned by `jobs.offline` (Task 4 owns that; the offline module earns nothing itself). The offline module only records whether the gap was capped: metric `offline.cappedCount` (gaps longer than `capHours × 3600`). The bar's speed stack is cleared by the bar module's own `offline()`, not by the offline module.
 
-**Step 1: Failing tests** — after exactly 10 taps in a stub session, credits include a bonus of 15× tap money and `ctx.speedMult` is 1.25; offline of 10 h with cap 8 h earns `8 × 3600 × income` and sets `capped: true`.
+**Step 1: Failing tests** — after exactly 10 taps in a stub session, credits include a bonus of 15× tap money and `ctx.speedMult` is 1.25; with `state.t` past `until` the bar's `multipliers()` is back to 1; an offline gap of 10 h with cap 8 h increments `offline.cappedCount` and `bar.offline()` empties the boost stack, and the credits earned over the gap are exactly what `jobs.offline` pays (the offline module adds none).
 
 **Step 2–5:** run, implement, run, commit `sim: bar bonus and offline mechanics`.
 
@@ -321,7 +321,7 @@ Bar: every `steps` taps pay `bonusTaps × tapMoney` and push a speed boost `{ un
 - Modify: `tools/sim/model/registry.mjs`
 - Test: `tools/sim/test/room.test.mjs`
 
-Rules (spec section "The room"): large slots `racks.largeSlots`; a rack occupies a large slot and adds `holds` small slots; small items and rigs need a small slot; large items need a large slot; rack cost `cost × r^racksPlaced`; decor slots take decor. Items: level `lv` 1..maxLevel, `grow = 1 + (lv−1) × growPerLevel`, pay bonus `(pay−1) × grow`, speed likewise, comfort `round(comfort × grow)` for decor and flat for tech when `techComfortFlat`; upgrade cost `cost × r^lv`. Rigs: offer when job unlocked and a small slot is free; buying marks the job rigged. Events: contribute average extra comfort `Σ boost × dur × acceptRate / meanInterval` for placed decor (no randomness).
+Rules (spec section "The room"): large slots `racks.largeSlots`; a rack occupies a large slot and adds `holds` small slots; small items and rigs need a small slot; large items need a large slot; rack cost `cost × r^racksPlaced`; decor slots take decor. Items: level `lv` 1..maxLevel, `grow = 1 + (lv−1) × growPerLevel`, pay bonus `(pay−1) × grow`, speed likewise, comfort `round(comfort × grow)` for decor and flat for tech when `techComfortFlat`; upgrade cost `cost × r^lv`. Rigs: offer when job unlocked and a small slot is free; buying marks the job rigged through `setRigged(state, jobId, rigName)` from `mods/jobs.mjs` (and reads the mark with `isRigged`); no module touches `state.jobs` directly. Events: contribute average extra comfort `Σ boost × dur × acceptRate / meanInterval` for placed decor (no randomness).
 
 **Step 1: Failing tests** — a rig offer appears only after a rack is placed; the second rack costs 50× the first; a large item never fits a shelf; lamp comfort at L25 is 29; GPU comfort stays 1 at L25; `events` adds a positive, deterministic comfort with one lamp placed.
 
@@ -348,13 +348,13 @@ Purpose: lock in the behaviour so later refactors of the model are caught. Run t
 - Create: `tools/sim/targets/seven-day-idle.json`
 - Test: `tools/sim/test/targets.test.mjs`
 
-Target format: `{ id, label, metric, op, value, profile: "all" | id, days?: [from, to] }`. Ops: `<=, <, >=, >, ==`. Metrics are resolved from `run().metrics`; `purchasesPerDay:min` with `days` resolves to the minimum over those days. `evaluate(targets, runsByProfile) → [{ id, profile, pass, actual, expected }]`.
+Target format: `{ id, label, metric, op, value, profile: "all" | id, days?: [from, to] }`. `firstEvent:level` is the first job level (item upgrades are kind `itemLevel`). Ops: `<=, <, >=, >, ==`. Metrics are resolved from `run().metrics`; `purchasesPerDay:min` with `days` resolves to the minimum over those days. `evaluate(targets, runsByProfile) → [{ id, profile, pass, actual, expected }]`.
 
 Starter targets file:
 
 ```json
 [
-  { "id": "first-upgrade", "label": "First level-up within 90 s", "metric": "firstEvent:level", "op": "<=", "value": 90, "profile": "all" },
+  { "id": "first-upgrade", "label": "First job level-up within 90 s", "metric": "firstEvent:level", "op": "<=", "value": 90, "profile": "all" },
   { "id": "first-rig", "label": "First rig inside the first session", "metric": "firstEvent:rig", "op": "<=", "value": 720, "profile": "all" },
   { "id": "daily-purchase", "label": "A rig or item every day D2–D6", "metric": "purchasesPerDay:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" },
   { "id": "d7-not-done", "label": "Something still to buy on day 7", "metric": "offersLeft.final", "op": ">=", "value": 1, "profile": "all" }

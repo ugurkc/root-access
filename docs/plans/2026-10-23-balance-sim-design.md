@@ -27,7 +27,7 @@ config.json ──► model (mechanic modules) ──► timeline + daily summar
 ```
 
 ### Config
-One JSON object, versioned with a `schema` field. Blocks per mechanic: `taps`, `bar`, `jobs`, `rigs`, `racks`, `items`, `events`, `offline`, `caps`. A block may carry `enabled: false` to switch the mechanic off. The current game's numbers are the first preset. The validator rejects unknown blocks and wrong types with a path to the offending key.
+One JSON object, versioned with a `schema` field. Blocks per mechanic: `taps`, `bar`, `jobs`, `rigs`, `racks`, `items`, `events`, `offline`. A block may carry `enabled: false` to switch the mechanic off. The current game's numbers are the first preset. The validator rejects unknown blocks and wrong types with a path to the offending key.
 
 The game loads the same data from `config.js` (a global `RA_CONFIG` object) next to its `index.html`, the pattern this repo's bench already uses, so it still runs from a static folder with no fetch. A tiny script converts between `config.json` and `config.js`; the content is identical.
 
