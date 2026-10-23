@@ -1,0 +1,18 @@
+{
+  "id": "active",
+  "sessions": {
+    "day1": { "hour": 20, "minutes": 12, "tps": 2.5 },
+    "later": [
+      { "hour": 8, "minutes": 5, "tps": 2.5 },
+      { "hour": 13, "minutes": 3, "tps": 2.5 },
+      { "hour": 21, "minutes": 8, "tps": 2.5 }
+    ]
+  },
+  "policy": {
+    "greedy": true,
+    "saveForBigWithinMinutes": 30,
+    "bigValueRatio": 1.5,
+    "buyRigsWhenAffordable": true,
+    "restartManualJobs": true
+  }
+}
