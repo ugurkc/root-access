@@ -1,5 +1,5 @@
 // Taps: each HACK tap pays a share of the running jobs' income and nudges their work along.
-import { NEUTRAL_CTX, runningIncome } from './jobs.mjs';
+import { advanceRunning, runningIncome } from './jobs.mjs';
 
 // Credits per tap: max(minMoney, rate × income of the running jobs) × comfortMult.
 export function tapMoney(state, cfg, ctx) {
@@ -10,21 +10,19 @@ export function tapMoney(state, cfg, ctx) {
 export const taps = {
   id: 'taps',
 
-  init(state, config) {
-    state.taps = { count: 0, cfg: config, lastCtx: NEUTRAL_CTX };
+  init(state) {
+    state.taps = { count: 0 };
   },
 
   // Pays for this tick's taps and advances every running job; the jobs module, which ticks
   // after taps, processes the completions.
   tick(state, dt, ctx) {
-    const cfg = state.taps.cfg;
-    state.taps.lastCtx = ctx;
+    const cfg = state.config;
     const n = ctx.tapsThisTick;
     if (!n) return;
     state.credits += n * tapMoney(state, cfg, ctx);
     state.taps.count += n;
-    if (!state.jobs) return;
-    for (const j of Object.values(state.jobs.byId)) if (j.running) j.work += n * cfg.taps.advance;
+    advanceRunning(state, n * cfg.taps.advance);
   },
 
   offers() {
@@ -33,8 +31,7 @@ export const taps = {
 
   buy() {},
 
-  metrics(state) {
-    const { cfg, lastCtx, count } = state.taps;
-    return { 'income.tap': tapMoney(state, cfg, lastCtx), 'taps.count': count };
+  metrics(state, ctx) {
+    return { 'income.tap': tapMoney(state, state.config, ctx), 'taps.count': state.taps.count };
   },
 };

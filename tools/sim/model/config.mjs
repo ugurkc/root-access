@@ -1,9 +1,11 @@
 // Config schema and validator for the balance simulator.
-// A shape is num | bool | str | enumOf([...]) | list(shape) | record(required, optional).
+// A shape is num | pos | bool | str | enumOf([...]) | list(shape) | record(required, optional).
+// `pos` is a finite number > 0: durations, prices and growth factors that would divide by or loop on zero.
 
 export const SCHEMA = 1;
 
 export const num = 'number';
+export const pos = { kind: 'pos' };
 export const bool = 'boolean';
 export const str = 'string';
 export const enumOf = (values) => ({ kind: 'enum', values });
@@ -13,23 +15,23 @@ export const record = (keys, optional = {}) => ({ kind: 'record', keys, optional
 // Every block is required: a block switched off with `enabled: false` must still be complete.
 export const SHAPES = {
   schema: num,
-  taps: record({ enabled: bool, rate: num, minMoney: num, advance: num }),
-  bar: record({ enabled: bool, steps: num, bonusTaps: num, speed: num, speedDur: num }),
+  taps: record({ enabled: bool, rate: pos, minMoney: num, advance: pos }),
+  bar: record({ enabled: bool, steps: pos, bonusTaps: pos, speed: num, speedDur: pos }),
   jobs: record({
     enabled: bool, maxLevel: num, milestones: list(num), revealAt: num,
-    list: list(record({ id: str, name: str, time: num, pay: num, cost: num, r: num, rep: num, unlock: num })),
+    list: list(record({ id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num })),
   }),
   rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: num })) }),
-  racks: record({ enabled: bool, largeSlots: num, decorSlots: num, cost: num, r: num, holds: num }),
+  racks: record({ enabled: bool, largeSlots: num, decorSlots: num, cost: pos, r: pos, holds: num }),
   items: record({
-    enabled: bool, maxLevel: num, r: num, growPerLevel: num, techComfortFlat: bool,
+    enabled: bool, maxLevel: num, r: pos, growPerLevel: num, techComfortFlat: bool,
     list: list(record(
-      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: num, comfort: num },
+      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: pos, comfort: num },
       { size: enumOf(['small', 'large']), pay: num, speed: num, event: record({ boost: num, dur: num }) },
     )),
   }),
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
-  offline: record({ enabled: bool, capHours: num }),
+  offline: record({ enabled: bool, capHours: pos }),
 };
 
 export const BLOCKS = Object.keys(SHAPES);
@@ -49,6 +51,12 @@ function check(value, shape, path, errs) {
   if (typeof shape === 'string') {
     const ok = typeof value === shape && (shape !== num || Number.isFinite(value));
     if (!ok) fail(`expected ${shape}, got ${describe(value)}`);
+    return;
+  }
+  if (shape.kind === 'pos') {
+    if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) {
+      fail(`expected positive number, got ${typeof value === 'number' ? value : describe(value)}`);
+    }
     return;
   }
   if (shape.kind === 'enum') {

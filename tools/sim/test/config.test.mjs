@@ -71,3 +71,12 @@ test('a missing block is exactly one missing-key error', () => {
   delete bad.offline;
   assert.deepEqual(validateConfig(bad), [{ path: 'offline', message: 'missing required key' }]);
 });
+
+test('a zero job time is reported: times, costs and growth must be positive', () => {
+  const bad = structuredClone(preset);
+  bad.jobs.list[0].time = 0;
+  bad.offline.capHours = -1;
+  const paths = validateConfig(bad).map(e => e.path);
+  assert.ok(paths.includes('jobs.list[0].time'));
+  assert.ok(paths.includes('offline.capHours'));
+});

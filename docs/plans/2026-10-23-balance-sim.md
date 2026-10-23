@@ -306,9 +306,9 @@ test('first level-up happens within 90 s of active play', () => {
 - Modify: `tools/sim/model/registry.mjs`
 - Test: `tools/sim/test/bar.test.mjs`
 
-Bar: every `steps` taps pay `bonusTaps × tapMoney` and push a speed boost `{ until: t + speedDur }`; `speedMult` contribution `1 + speed × activeBoosts`; boosts clear on offline. Offline: for a gap, earn `passiveIncome × min(gap, capHours×3600)` and add rep for rigged jobs; record `{ kind: 'offline', earned, capped }`.
+Bar: every `steps` taps pay `bonusTaps × tapMoney` (import `tapMoney` from `mods/taps.mjs`) and push a speed boost `{ until: t + speedDur }`; `speedMult` contribution `1 + speed × activeBoosts`. `multipliers(state)` must be time-aware: a boost counts only while `state.t < until`, so an expired boost can never scale offline earnings; boosts also clear on offline. Offline: credits and rep while away are earned by `jobs.offline` (Task 4 owns that; the offline module earns nothing itself). The offline module only records whether the gap was capped: metric `offline.cappedCount` (gaps longer than `capHours × 3600`) and clears the bar's speed stack.
 
-**Step 1: Failing tests** — after exactly 10 taps in a stub session, credits include a bonus of 15× tap money and `ctx.speedMult` is 1.25; offline of 10 h with cap 8 h earns `8 × 3600 × income` and sets `capped: true`.
+**Step 1: Failing tests** — after exactly 10 taps in a stub session, credits include a bonus of 15× tap money and `ctx.speedMult` is 1.25; with `state.t` past `until` the bar's `multipliers()` is back to 1; an offline gap of 10 h with cap 8 h increments `offline.cappedCount` and empties the boost stack, and the credits earned over the gap are exactly what `jobs.offline` pays (the offline module adds none).
 
 **Step 2–5:** run, implement, run, commit `sim: bar bonus and offline mechanics`.
 
@@ -321,7 +321,7 @@ Bar: every `steps` taps pay `bonusTaps × tapMoney` and push a speed boost `{ un
 - Modify: `tools/sim/model/registry.mjs`
 - Test: `tools/sim/test/room.test.mjs`
 
-Rules (spec section "The room"): large slots `racks.largeSlots`; a rack occupies a large slot and adds `holds` small slots; small items and rigs need a small slot; large items need a large slot; rack cost `cost × r^racksPlaced`; decor slots take decor. Items: level `lv` 1..maxLevel, `grow = 1 + (lv−1) × growPerLevel`, pay bonus `(pay−1) × grow`, speed likewise, comfort `round(comfort × grow)` for decor and flat for tech when `techComfortFlat`; upgrade cost `cost × r^lv`. Rigs: offer when job unlocked and a small slot is free; buying marks the job rigged. Events: contribute average extra comfort `Σ boost × dur × acceptRate / meanInterval` for placed decor (no randomness).
+Rules (spec section "The room"): large slots `racks.largeSlots`; a rack occupies a large slot and adds `holds` small slots; small items and rigs need a small slot; large items need a large slot; rack cost `cost × r^racksPlaced`; decor slots take decor. Items: level `lv` 1..maxLevel, `grow = 1 + (lv−1) × growPerLevel`, pay bonus `(pay−1) × grow`, speed likewise, comfort `round(comfort × grow)` for decor and flat for tech when `techComfortFlat`; upgrade cost `cost × r^lv`. Rigs: offer when job unlocked and a small slot is free; buying marks the job rigged through `setRigged(state, jobId, rigName)` from `mods/jobs.mjs` (and reads the mark with `isRigged`); no module touches `state.jobs` directly. Events: contribute average extra comfort `Σ boost × dur × acceptRate / meanInterval` for placed decor (no randomness).
 
 **Step 1: Failing tests** — a rig offer appears only after a rack is placed; the second rack costs 50× the first; a large item never fits a shelf; lamp comfort at L25 is 29; GPU comfort stays 1 at L25; `events` adds a positive, deterministic comfort with one lamp placed.
 

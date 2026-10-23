@@ -9,8 +9,16 @@
 //   offline?(state, seconds, ctx)  advance an absence; only mechanics that earn while away implement it
 //   offers(state, ctx)          → [{ id, cost, gainPerSec, kind }], all numbers finite; `id` unique per module
 //   buy(state, offerId)         apply the effect only. The core has already deducted `cost` from `state.credits`
-//   metrics(state)              → { 'name': number }; merged into the run's metrics
-//   multipliers?(state)         → partial { payMult, speedMult, comfortMult }; missing keys default to 1
+//   metrics(state, ctx)         → { 'name': number }; merged into the run's metrics. `ctx` is the current
+//                               multipliers at the call site (the core always passes one; a caller with
+//                               none in hand passes a neutral ctx of all 1s)
+//   multipliers?(state)         → partial { payMult, speedMult, comfortMult }; missing keys default to 1,
+//                               every value must be finite (the core throws otherwise)
+//
+// State: the core sets `state.config` once in run(); module methods read config from there and
+// never stash it in their own slice. A module's slice layout is private: other modules go through
+// the intent-level helpers it exports (e.g. jobs.mjs `advanceRunning`, `setRigged`, `isRigged`).
+// Exported helpers take `cfg` explicitly, `helper(state, cfg, ...)`, so a test can hand them any config.
 //
 // Metric keys the core reads:
 //   'income.passive'  credits per second earned without tapping

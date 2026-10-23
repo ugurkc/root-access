@@ -137,3 +137,19 @@ test('an offer that never goes away hits the shop cap, counted in shop.capHits',
   assert.ok(r.metrics['shop.capHits'] > 0);
   assert.equal(r.timeline.length, r.metrics['shop.capHits'] * 300);
 });
+
+test('the core sets state.config and passes the current ctx to metrics', () => {
+  let seenConfig, seenCtx;
+  const mod = { id: 'x', init: s => { seenConfig = s.config; }, tick: () => {}, offers: () => [], buy: () => {},
+    metrics: (s, ctx) => { seenCtx = ctx; return {}; }, multipliers: () => ({ payMult: 3 }) };
+  run({ config: cfg, profile: active, days: 1, modules: [mod] });
+  assert.equal(seenConfig, cfg);
+  assert.equal(seenCtx.payMult, 3);
+  assert.equal(seenCtx.policy, active.policy);
+});
+
+test('a non-finite multiplier is a clear error, not a silent NaN run', () => {
+  const mod = { id: 'bad', init: () => {}, tick: () => {}, offers: () => [], buy: () => {}, metrics: () => ({}),
+    multipliers: () => ({ speedMult: NaN }) };
+  assert.throws(() => run({ config: cfg, profile: active, days: 1, modules: [mod] }), /bad.*speedMult/);
+});

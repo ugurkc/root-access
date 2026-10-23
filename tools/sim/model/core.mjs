@@ -22,7 +22,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   const mods = modules.filter((m) => config[m.id]?.enabled !== false);
   // state.t is simulated seconds since the first session began (gaps included), not since midnight
   // of day 1, so timeline `t` and `session.start` are in different frames.
-  const state = { t: 0, day: 1, credits: 0 };
+  const state = { t: 0, day: 1, credits: 0, config };
   for (const m of mods) m.init(state, config, profile);
 
   const timeline = [];
@@ -76,7 +76,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     prevEnd = session.start + total;
     row.activeMinutes += session.minutes;
     row.credits = state.credits;
-    row.incomePassive = passiveIncome(state, mods);
+    row.incomePassive = passiveIncome(state, mods, buildCtx(state, mods, profile, 0));
   }
 
   // Days without a session keep the previous day's closing balance and income.
@@ -88,26 +88,32 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   }
   for (const e of timeline) if (e.kind !== 'offline') summary[e.day - 1].purchases.push(e.id);
 
+  const finalCtx = buildCtx(state, mods, profile, 0);
   const metrics = {};
-  for (const m of mods) Object.assign(metrics, m.metrics(state));
+  for (const m of mods) Object.assign(metrics, m.metrics(state, finalCtx));
   for (const [kind, seconds] of Object.entries(firstEvent)) metrics[`firstEvent:${kind}`] = seconds;
   metrics.purchasesPerDay = summary.map((r) => r.purchases.length);
   metrics['credits.final'] = state.credits;
-  metrics['offersLeft.final'] = allOffers(state, buildCtx(state, mods, profile, 0), mods).length;
+  metrics['offersLeft.final'] = allOffers(state, finalCtx, mods).length;
   metrics['shop.capHits'] = shopStats.capHits;
 
   return { summary, timeline, metrics, final: { credits: state.credits, state } };
 }
 
+const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult'];
+
 // Multipliers of all modules multiplied together (default 1), plus tick bookkeeping and the policy.
+// A non-finite multiplier would silently poison every number downstream, so it is an error here.
 function buildCtx(state, mods, profile, tapsThisTick) {
   const ctx = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick, t: state.t, policy: profile.policy };
   for (const m of mods) {
     if (!m.multipliers) continue;
     const k = m.multipliers(state) ?? {};
-    ctx.payMult *= k.payMult ?? 1;
-    ctx.speedMult *= k.speedMult ?? 1;
-    ctx.comfortMult *= k.comfortMult ?? 1;
+    for (const key of MULT_KEYS) {
+      const v = k[key] ?? 1;
+      if (!Number.isFinite(v)) throw new Error(`module ${m.id}: multipliers().${key} is ${v}`);
+      ctx[key] *= v;
+    }
   }
   return ctx;
 }
@@ -116,15 +122,15 @@ function allOffers(state, ctx, mods) {
   return mods.flatMap((m) => m.offers(state, ctx).map((o) => ({ ...o, module: m })));
 }
 
-function passiveIncome(state, mods) {
-  return mods.reduce((sum, m) => sum + (m.metrics(state)['income.passive'] ?? 0), 0);
+function passiveIncome(state, mods, ctx) {
+  return mods.reduce((sum, m) => sum + (m.metrics(state, ctx)['income.passive'] ?? 0), 0);
 }
 
 // Credits per second the player can expect: passive income plus tap earnings
 // (`income.tap` is reported per tap; the session's taps per second turn it into a rate).
-function effectiveIncome(state, mods, tps) {
+function effectiveIncome(state, mods, ctx, tps) {
   return mods.reduce((sum, m) => {
-    const k = m.metrics(state);
+    const k = m.metrics(state, ctx);
     return sum + (k['income.passive'] ?? 0) + (k['income.tap'] ?? 0) * tps;
   }, 0);
 }
@@ -161,7 +167,7 @@ function shop(state, ctx, mods, tps, record, stats) {
     const affordable = offers.filter((o) => o.cost <= state.credits);
     if (affordable.length === 0) break;
     const best = affordable.reduce((a, b) => (value(b) > value(a) ? b : a));
-    const reach = state.credits + effectiveIncome(state, mods, tps) * (policy.saveForBigWithinMinutes ?? 0) * 60;
+    const reach = state.credits + effectiveIncome(state, mods, ctx, tps) * (policy.saveForBigWithinMinutes ?? 0) * 60;
     const big = offers.find((o) =>
       o.cost > state.credits && BIG_KINDS.has(o.kind) && o.cost <= reach &&
       value(o) > value(best) * (policy.bigValueRatio ?? 1));
