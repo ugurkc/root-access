@@ -37,8 +37,12 @@
 //
 // Intended order once the modules exist: taps, bar, jobs, rigs, racks, items, events, offline.
 import { taps } from './mods/taps.mjs';
+import { bar } from './mods/bar.mjs';
 import { jobs } from './mods/jobs.mjs';
+import { offline } from './mods/offline.mjs';
 
+// taps before bar so the bar counts this tick's taps; bar before jobs so a boost reaches job work
+// as early as possible (the core collects multipliers() before the tick, so from the next tick on).
 export function defaultModules() {
-  return [taps, jobs];
+  return [taps, bar, jobs, offline];
 }

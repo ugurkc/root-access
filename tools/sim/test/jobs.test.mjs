@@ -99,7 +99,7 @@ test('tap money is max(1, 0.25 × running income) and taps advance running jobs'
 
 test('offline pays only rigged jobs, capped at 8 h', () => {
   const s = fresh(); jobs.init(s, cfg, active);
-  s.jobs.byId.wifi.lv = 1; s.jobs.byId.wifi.rigged = true;
+  s.jobs.byId.wifi.lv = 1; setRigged(s, 'wifi', 'DeAuth-o-Matic 3000');
   jobs.offline(s, 10 * 3600, ctx1);
   assert.equal(s.credits, 3 * (8 * 3600 / 6));
 });

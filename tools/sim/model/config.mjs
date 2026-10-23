@@ -21,7 +21,7 @@ export const SHAPES = {
     enabled: bool, maxLevel: num, milestones: list(num), revealAt: num,
     list: list(record({ id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num })),
   }),
-  rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: num })) }),
+  rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) }),
   racks: record({ enabled: bool, largeSlots: num, decorSlots: num, cost: pos, r: pos, holds: num }),
   items: record({
     enabled: bool, maxLevel: num, r: pos, growPerLevel: num, techComfortFlat: bool,
