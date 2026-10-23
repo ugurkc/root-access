@@ -7,13 +7,14 @@ export const VERSION = '0.1.0';
 const BIG_KINDS = new Set(['rig', 'item', 'rack']);
 const MAX_BUYS_PER_SHOP = 300;
 
-// Day 1 plays `sessions.day1`; every later day plays each entry of `sessions.later`.
+// Day 1 plays `sessions.day1`; every later day plays each entry of `sessions.later`, sorted by hour.
 // `start` is wall-clock seconds since midnight of day 1.
 export function sessionsFor(profile, days) {
   const out = [];
   const add = (day, s) => out.push({ day, hour: s.hour, minutes: s.minutes, tps: s.tps, start: ((day - 1) * 24 + s.hour) * 3600 });
   if (days >= 1) add(1, profile.sessions.day1);
-  for (let day = 2; day <= days; day++) for (const s of profile.sessions.later) add(day, s);
+  const later = [...profile.sessions.later].sort((a, b) => a.hour - b.hour);
+  for (let day = 2; day <= days; day++) for (const s of later) add(day, s);
   return out;
 }
 
@@ -22,7 +23,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   // state.t is simulated seconds since the first session began (gaps included), not since midnight
   // of day 1, so timeline `t` and `session.start` are in different frames.
   const state = { t: 0, day: 1, credits: 0 };
-  for (const m of mods) m.init(state, config);
+  for (const m of mods) m.init(state, config, profile);
 
   const timeline = [];
   const firstEvent = {};
@@ -30,6 +31,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     day: i + 1, activeMinutes: 0, credits: 0, incomePassive: 0, offlineEarned: 0, activeEarned: 0, purchases: [],
   }));
   let activeSeconds = 0;
+  const shopStats = { capHits: 0 };
   const record = (event) => {
     timeline.push(event);
     if (event.kind !== 'offline' && !(event.kind in firstEvent)) firstEvent[event.kind] = activeSeconds;
@@ -40,7 +42,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     const row = summary[session.day - 1];
     if (prevEnd !== null && session.start > prevEnd) {
       const gap = session.start - prevEnd;
-      const ctx = buildCtx(state, mods, 0);
+      const ctx = buildCtx(state, mods, profile, 0);
       const before = state.credits;
       for (const m of mods) if (m.offline) m.offline(state, gap, ctx);
       state.t += gap;
@@ -59,7 +61,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     const sessionStartActive = activeSeconds;
     let lastShopSecond = 0;
     for (let i = 1; i <= ticks; i++) {
-      const ctx = buildCtx(state, mods, 1);
+      const ctx = buildCtx(state, mods, profile, 1);
       const before = state.credits;
       for (const m of mods) m.tick(state, dt, ctx);
       row.activeEarned += state.credits - before;
@@ -68,7 +70,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
       activeSeconds = sessionStartActive + elapsed;
       if (Math.floor(elapsed) > lastShopSecond) {
         lastShopSecond = Math.floor(elapsed);
-        shop(state, ctx, profile, mods, session.tps, record);
+        shop(state, ctx, mods, session.tps, record, shopStats);
       }
     }
     prevEnd = session.start + total;
@@ -91,14 +93,15 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   for (const [kind, seconds] of Object.entries(firstEvent)) metrics[`firstEvent:${kind}`] = seconds;
   metrics.purchasesPerDay = summary.map((r) => r.purchases.length);
   metrics['credits.final'] = state.credits;
-  metrics['offersLeft.final'] = allOffers(state, buildCtx(state, mods, 0), mods).length;
+  metrics['offersLeft.final'] = allOffers(state, buildCtx(state, mods, profile, 0), mods).length;
+  metrics['shop.capHits'] = shopStats.capHits;
 
   return { summary, timeline, metrics, final: { credits: state.credits, state } };
 }
 
-// Multipliers of all modules multiplied together (default 1), plus tick bookkeeping.
-function buildCtx(state, mods, tapsThisTick) {
-  const ctx = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick, t: state.t };
+// Multipliers of all modules multiplied together (default 1), plus tick bookkeeping and the policy.
+function buildCtx(state, mods, profile, tapsThisTick) {
+  const ctx = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick, t: state.t, policy: profile.policy };
   for (const m of mods) {
     if (!m.multipliers) continue;
     const k = m.multipliers(state) ?? {};
@@ -126,25 +129,34 @@ function effectiveIncome(state, mods, tps) {
   }, 0);
 }
 
-const value = (o) => (o.cost > 0 ? o.gainPerSec / o.cost : Infinity);
+// Gain per credit spent; a non-finite ratio (NaN, zero cost) ranks below everything.
+const value = (o) => {
+  const v = o.gainPerSec / o.cost;
+  return Number.isFinite(v) ? v : -Infinity;
+};
 
 // Buying policy from the profile, applied to the union of all modules' offers.
-function shop(state, ctx, profile, mods, tps, record) {
-  const policy = profile.policy ?? {};
+// The core deducts the cost; a module's buy() only applies the effect.
+function shop(state, ctx, mods, tps, record, stats) {
+  const policy = ctx.policy ?? {};
   const purchase = (o) => {
+    state.credits -= o.cost;
     o.module.buy(state, o.id);
     record({ t: state.t, day: state.day, kind: o.kind, id: o.id, cost: o.cost });
   };
 
   if (policy.buyRigsWhenAffordable) {
-    for (let i = 0; i < MAX_BUYS_PER_SHOP; i++) {
+    let i = 0;
+    for (; i < MAX_BUYS_PER_SHOP; i++) {
       const rig = allOffers(state, ctx, mods).find((o) => o.kind === 'rig' && o.cost <= state.credits);
       if (!rig) break;
       purchase(rig);
     }
+    if (i === MAX_BUYS_PER_SHOP) stats.capHits++;
   }
 
-  for (let i = 0; i < MAX_BUYS_PER_SHOP; i++) {
+  let i = 0;
+  for (; i < MAX_BUYS_PER_SHOP; i++) {
     const offers = allOffers(state, ctx, mods);
     const affordable = offers.filter((o) => o.cost <= state.credits);
     if (affordable.length === 0) break;
@@ -156,4 +168,5 @@ function shop(state, ctx, profile, mods, tps, record) {
     if (big) break;
     purchase(best);
   }
+  if (i === MAX_BUYS_PER_SHOP) stats.capHits++;
 }

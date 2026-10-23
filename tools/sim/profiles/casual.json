@@ -7,7 +7,6 @@
     ]
   },
   "policy": {
-    "greedy": true,
     "saveForBigWithinMinutes": 30,
     "bigValueRatio": 1.5,
     "buyRigsWhenAffordable": true,
