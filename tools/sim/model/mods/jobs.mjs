@@ -6,6 +6,7 @@
 //   setRigged(state, id, rigName)   mark a job as automated (rigs)
 //   isRigged(state, id)             read that mark (rigs, racks)
 // Exported helpers take `cfg` explicitly so a test can hand them any config.
+import { offlineCapSeconds } from './offline.mjs';
 
 const OFFER_PREFIX = 'job:';
 const OFFER_SUFFIX = ':lv';
@@ -112,9 +113,8 @@ export const jobs = {
   // While away only rigged jobs run, for at most `offline.capHours`, in whole runs.
   offline(state, seconds, ctx) {
     const cfg = state.config;
-    const off = cfg.offline;
-    if (!off || off.enabled === false) return;
-    const secs = Math.min(seconds, off.capHours * 3600);
+    const secs = Math.min(seconds, offlineCapSeconds(cfg));
+    if (secs <= 0) return;
     for (const job of cfg.jobs.list) {
       const j = state.jobs.byId[job.id];
       if (j.lv === 0 || !j.rigged) continue;

@@ -6,7 +6,9 @@
 //   init(state, config, profile) create the module's own slice of state (e.g. `state.jobs = {...}`);
 //                               never rely on another module having run first
 //   tick(state, dt, ctx)        advance `dt` seconds of active play
-//   offline?(state, seconds, ctx)  advance an absence; only mechanics that earn while away implement it
+//   offline?(state, seconds, ctx)  advance an absence, or reset anything that does not survive one (bar empties
+//                               its boost stack). Called in registry order, with ctx rebuilt before each
+//                               module's call, so a module sees the multipliers as left by the modules before it
 //   offers(state, ctx)          → [{ id, cost, gainPerSec, kind }], all numbers finite; `id` unique per module
 //   buy(state, offerId)         apply the effect only. The core has already deducted `cost` from `state.credits`
 //   metrics(state, ctx)         → { 'name': number }; merged into the run's metrics. `ctx` is the current
@@ -29,13 +31,14 @@
 //   'rig', 'item', 'rack'  "big": the shop saves for one that is reachable within the save window
 //                          and beats the best affordable offer by policy.bigValueRatio
 //
-// ctx, rebuilt each tick and each offline call:
+// ctx, rebuilt each tick, and per module in the gap loop:
 //   { payMult, speedMult, comfortMult,  product of every module's multipliers()
 //     tapsThisTick,                     1 per tick while in a session, 0 offline
 //     t,                                simulated seconds since the first session began (gaps included)
 //     policy }                          the profile's buying policy
 //
 // Intended order once the modules exist: taps, bar, jobs, rigs, racks, items, events, offline.
+// bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
 import { taps } from './mods/taps.mjs';
 import { bar } from './mods/bar.mjs';
 import { jobs } from './mods/jobs.mjs';

@@ -9,8 +9,8 @@ import { tapMoney } from './taps.mjs';
 
 const activeBoosts = (state) => state.bar.boosts.filter((until) => until > state.t).length;
 
-export function barSpeed(state) {
-  return 1 + state.config.bar.speed * activeBoosts(state);
+export function barSpeed(state, cfg) {
+  return 1 + cfg.bar.speed * activeBoosts(state);
 }
 
 export const bar = {
@@ -39,7 +39,7 @@ export const bar = {
   },
 
   multipliers(state) {
-    return { speedMult: barSpeed(state) };
+    return { speedMult: barSpeed(state, state.config) };
   },
 
   offers() {

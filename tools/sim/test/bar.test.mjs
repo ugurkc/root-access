@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { run } from '../model/core.mjs';
+import { run, sessionsFor } from '../model/core.mjs';
 import { defaultModules } from '../model/registry.mjs';
 import { jobs, setRigged } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
@@ -27,10 +27,10 @@ test('the tenth tap fills the bar: 15 taps of bonus money, ×1.25 speed, one bar
   assert.equal(perTap, 6.25);
   for (let i = 0; i < 9; i++) bar.tick(s, 0.4, ctx1);
   assert.equal(s.credits, 0);
-  assert.equal(barSpeed(s), 1);
+  assert.equal(barSpeed(s, cfg), 1);
   bar.tick(s, 0.4, ctx1);
   assert.equal(s.credits, 15 * perTap);
-  assert.equal(barSpeed(s), 1.25);
+  assert.equal(barSpeed(s, cfg), 1.25);
   assert.equal(bar.multipliers(s).speedMult, 1.25);
   assert.equal(bar.metrics(s, ctx0)['bar.bars'], 1);
   assert.equal(bar.metrics(s, ctx0)['bar.activeBoosts'], 1);
@@ -43,13 +43,13 @@ test('two bars within 12 s stack to ×1.5 and expire one by one against state.t'
   for (let i = 1; i <= 20; i++) { bar.tick(s, 0.4, ctx1); s.t = i * 0.4; }
   // Bars filled at t = 3.6 and 7.6 (the t of their tick), so boosts last to 15.6 and 19.6.
   assert.equal(bar.metrics(s, ctx0)['bar.bars'], 2);
-  assert.equal(barSpeed(s), 1.5);
+  assert.equal(barSpeed(s, cfg), 1.5);
   s.t = 15.5;
-  assert.equal(barSpeed(s), 1.5);
+  assert.equal(barSpeed(s, cfg), 1.5);
   s.t = 15.6;
-  assert.equal(barSpeed(s), 1.25);
+  assert.equal(barSpeed(s, cfg), 1.25);
   s.t = 19.6;
-  assert.equal(barSpeed(s), 1);
+  assert.equal(barSpeed(s, cfg), 1);
   assert.equal(bar.multipliers(s).speedMult, 1);
   assert.equal(bar.metrics(s, ctx0)['bar.activeBoosts'], 0);
   bar.tick(s, 0.4, ctx0);                                   // pruning drops the expired boosts
@@ -59,11 +59,11 @@ test('two bars within 12 s stack to ×1.5 and expire one by one against state.t'
 test('an absence clears the speed stack but keeps the partial bar', () => {
   const s = withWifiRunning();
   for (let i = 0; i < 15; i++) bar.tick(s, 0.4, ctx1);
-  assert.equal(barSpeed(s), 1.25);
+  assert.equal(barSpeed(s, cfg), 1.25);
   assert.equal(s.bar.steps, 5);
   bar.offline(s, 36000, ctx0);
   assert.deepEqual(s.bar.boosts, []);
-  assert.equal(barSpeed(s), 1);
+  assert.equal(barSpeed(s, cfg), 1);
   assert.equal(s.bar.steps, 5);
   assert.equal(s.credits, 15 * 6.25);                       // offline earns nothing here
 });
@@ -100,8 +100,10 @@ test('over two days the offline module sees three gaps and earns nothing', () =>
   const full = run({ config: cfg, profile: active, days: 2 });
   const noOfflineMod = run({ config: cfg, profile: active, days: 2, modules: [taps, bar, jobs] });
   assert.equal(full.metrics['offline.gaps'], 3);
-  assert.equal(full.metrics['offline.cappedCount'], 1);     // 20:12 → 08:00 is 11 h 48 min
-  assert.equal(full.metrics['offline.cappedSeconds'], 11 * 3600 + 48 * 60 - 8 * 3600);
+  const [first, second] = sessionsFor(active, 2);
+  const firstGap = second.start - (first.start + first.minutes * 60);   // 20:12 → 08:00, over the 8 h cap
+  assert.equal(full.metrics['offline.cappedCount'], 1);
+  assert.equal(full.metrics['offline.cappedSeconds'], firstGap - 8 * 3600);
   assert.equal(full.final.credits, noOfflineMod.final.credits);
   assert.deepEqual(full.summary.map((r) => r.offlineEarned), noOfflineMod.summary.map((r) => r.offlineEarned));
 });

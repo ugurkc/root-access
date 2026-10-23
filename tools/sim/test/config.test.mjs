@@ -20,6 +20,12 @@ test('wrong type is reported with its path', () => {
   assert.ok(validateConfig(bad).some(e => e.path === 'jobs.list[0].cost'));
 });
 
+test('a zero rig price is reported at its path', () => {
+  const bad = structuredClone(preset);
+  bad.rigs.list[0].cost = 0;
+  assert.ok(validateConfig(bad).some(e => e.path === 'rigs.list[0].cost'));
+});
+
 test('rig must reference an existing job', () => {
   const bad = structuredClone(preset);
   bad.rigs.list[0].job = 'nope';

@@ -43,8 +43,8 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     if (prevEnd !== null && session.start > prevEnd) {
       const gap = session.start - prevEnd;
       const before = state.credits;
-      // Modules see the gap in registry order, each with multipliers rebuilt after the previous one:
-      // the bar clears the boosts that were active at session end before jobs computes its earnings.
+      // Modules see the gap in registry order, each with multipliers rebuilt after the previous one,
+      // so a module that resets state on absence must precede one that prices the gap.
       for (const m of mods) if (m.offline) m.offline(state, gap, buildCtx(state, mods, profile, 0));
       state.t += gap;
       state.day = session.day;
