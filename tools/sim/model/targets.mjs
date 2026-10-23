@@ -6,7 +6,8 @@
 //   '<key>'                      r.metrics[key], e.g. 'firstEvent:rig', 'offersLeft.final'
 //   'purchasesPerDay:min|max|sum'          over r.metrics.purchasesPerDay
 //   'purchasesPerDay[k1,k2]:min|max|sum'   over the per-day sum of r.metrics.purchasesByKindPerDay for
-//                                          the listed offer kinds (rig, item, rack, level, itemLevel)
+//                                          the listed offer kinds (one or more of KINDS); an unknown
+//                                          kind is an error
 //                                both restricted to `days` (1-based, inclusive) when given; a range
 //                                past the run's last day is an error
 //   'summary.<field>:day<N>'     r.summary[N-1][field], e.g. 'summary.incomePassive:day7'
@@ -29,11 +30,22 @@ const REDUCERS = {
   sum: (xs) => xs.reduce((s, x) => s + x, 0),
 };
 
+// Offer kinds the modules emit (see registry.mjs), in shop order.
+export const KINDS = ['level', 'itemLevel', 'item', 'rig', 'rack'];
+
 const SUMMARY_RE = /^summary\.([A-Za-z_]\w*):day([1-9]\d*)$/;
 const PER_DAY_RE = /^purchasesPerDay(?:\[([^\]]*)\])?:(\w+)$/;
 const FIRST_EVENT_PREFIX = 'firstEvent:';
 
 const isPerDayMetric = (metric) => typeof metric === 'string' && PER_DAY_RE.test(metric);
+
+// "rig, item" → { kinds } or { error }: 'unknown metric' for an empty list, 'unknown kind "x"' otherwise.
+function parseKinds(kindList) {
+  const kinds = kindList.split(',').map((k) => k.trim()).filter(Boolean);
+  if (kinds.length === 0) return { error: 'unknown metric' };
+  const bad = kinds.find((k) => !KINDS.includes(k));
+  return bad === undefined ? { kinds } : { error: `unknown kind ${JSON.stringify(bad)}` };
+}
 
 // → { actual } or { error }. `actual` is undefined when the metric exists but has no value yet.
 export function resolveMetric(r, metric, days) {
@@ -42,7 +54,13 @@ export function resolveMetric(r, metric, days) {
   if (perDay) {
     const [, kindList, reducer] = perDay;
     if (!Object.hasOwn(REDUCERS, reducer)) return { error: 'unknown metric' };
-    const all = perDayCounts(r, kindList);
+    let kinds;
+    if (kindList !== undefined) {
+      const parsed = parseKinds(kindList);
+      if (parsed.error) return { error: parsed.error };
+      kinds = parsed.kinds;
+    }
+    const all = perDayCounts(r, kinds);
     const [from, to] = Array.isArray(days) ? days : [1, all.length];
     if (to > all.length) return { error: `days [${from}, ${to}] exceed run length ${all.length}` };
     const slice = all.slice(from - 1, to);
@@ -57,12 +75,11 @@ export function resolveMetric(r, metric, days) {
   return { error: 'unknown metric' };
 }
 
-// Per-day purchase counts: all kinds, or the sum of the kinds listed in `kindList` ("rig, item").
-function perDayCounts(r, kindList) {
+// Per-day purchase counts: all kinds, or the sum of the given kinds.
+function perDayCounts(r, kinds) {
   const total = r.metrics?.purchasesPerDay ?? [];
-  if (kindList === undefined) return total;
+  if (kinds === undefined) return total;
   const byKind = r.metrics?.purchasesByKindPerDay ?? {};
-  const kinds = kindList.split(',').map((k) => k.trim()).filter(Boolean);
   return total.map((_, i) => kinds.reduce((s, k) => s + (Object.hasOwn(byKind, k) ? byKind[k][i] ?? 0 : 0), 0));
 }
 
@@ -74,7 +91,7 @@ function verdict(target, profile, r) {
   if (!r) return { ...base, pass: false, actual: null, error: `no run for profile ${profile}` };
   const { actual, error } = resolveMetric(r, target.metric, target.days);
   if (error) return { ...base, pass: false, actual: null, error };
-  if (!Object.hasOwn(OPS, target.op)) return { ...base, pass: false, actual: actual ?? null, error: `unknown op ${target.op}` };
+  if (!Object.hasOwn(OPS, target.op)) return { ...base, pass: false, actual: null, error: `unknown op ${target.op}` };
   if (typeof actual !== 'number' || !Number.isFinite(actual)) return { ...base, pass: false, actual: null, error: 'no value' };
   return { ...base, pass: OPS[target.op](actual, target.value), actual };
 }
@@ -107,6 +124,11 @@ export function validateTargets(targets) {
     if (typeof t !== 'object' || t === null || Array.isArray(t)) { errs.push({ path: `[${i}]`, message: 'expected an object' }); return; }
     for (const key of ['id', 'label', 'metric', 'profile']) {
       if (typeof t[key] !== 'string' || t[key] === '') fail(key, 'expected a non-empty string');
+    }
+    const perDay = typeof t.metric === 'string' ? PER_DAY_RE.exec(t.metric) : null;
+    if (perDay && perDay[1] !== undefined) {
+      const { error } = parseKinds(perDay[1]);
+      if (error) fail('metric', `${error === 'unknown metric' ? 'empty kind list' : error}; kinds are ${KINDS.join(', ')}`);
     }
     if (typeof t.id === 'string') {
       if (seen.has(t.id)) fail('id', `duplicate id ${JSON.stringify(t.id)}`);

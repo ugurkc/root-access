@@ -1,7 +1,8 @@
 // The game reads its tuning from `config.js`, a script that assigns `window.RA_CONFIG`; the
 // simulator works on the same object as plain JSON. These two functions convert between them.
 // fromJs() only reads what toJs() writes (a JSON literal after the prefix); the CLI falls back to
-// evaluating any other hand-written config.js with node:vm, which cannot live here.
+// evaluating any other hand-written config.js with node:vm, which cannot live here. That fallback
+// runs the file's code, so `convert --to json` is for trusted files only.
 // Plain ES module with no node: imports: it runs in the browser too.
 
 export const PREFIX = 'window.RA_CONFIG = ';

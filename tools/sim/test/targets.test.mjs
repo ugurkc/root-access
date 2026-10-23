@@ -89,6 +89,20 @@ test('purchasesPerDay[kinds]:reducer sums the named kinds per day', () => {
   assert.equal(evaluate([{ ...t({ metric: 'purchasesPerDay[rig]:median' }), profile: 'k' }], kinds)[0].error, 'unknown metric');
 });
 
+test('purchasesPerDay[...] only accepts the known offer kinds, and at least one', () => {
+  const [typo] = evaluate([t({ metric: 'purchasesPerDay[rigs]:min' })], runs);
+  assert.equal(typo.pass, false);
+  assert.equal(typo.actual, null);
+  assert.equal(typo.error, 'unknown kind "rigs"');
+  assert.equal(evaluate([t({ metric: 'purchasesPerDay[rig,items]:sum' })], runs)[0].error, 'unknown kind "items"');
+  assert.equal(evaluate([t({ metric: 'purchasesPerDay[]:sum' })], runs)[0].error, 'unknown metric');
+  assert.equal(evaluate([t({ metric: 'purchasesPerDay[ ]:sum' })], runs)[0].error, 'unknown metric');
+  const errs = validateTargets([t({ metric: 'purchasesPerDay[rigs]:min' }), t({ id: 'e', metric: 'purchasesPerDay[]:min' }), t({ id: 'ok', metric: 'purchasesPerDay[level,itemLevel,item,rig,rack]:max' })]);
+  assert.deepEqual(errs.map((e) => e.path), ['[0].metric', '[1].metric']);
+  assert.match(errs[0].message, /unknown kind "rigs"/);
+  assert.match(errs[0].message, /level, itemLevel, item, rig, rack/);
+});
+
 test('summary.<field>:dayN resolves from the summary row', () => {
   const [v] = evaluate([t({ metric: 'summary.incomePassive:day3', op: '==', value: 30 })], runs);
   assert.equal(v.actual, 30);
@@ -118,6 +132,7 @@ test('an unknown metric yields a failed verdict with error', () => {
 test('an inherited property name is not an op', () => {
   const [v] = evaluate([t({ op: 'constructor' })], runs);
   assert.equal(v.pass, false);
+  assert.equal(v.actual, null);
   assert.match(v.error, /unknown op/);
   assert.deepEqual(validateTargets([t({ op: 'constructor' })]).map((e) => e.path), ['[0].op']);
 });
