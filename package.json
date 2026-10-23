@@ -1,0 +1,8 @@
+{
+  "name": "root-access-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'tools/sim/test/*.test.mjs'"
+  }
+}
