@@ -26,6 +26,20 @@
         "/Users/ugurkoc/repos/ugurkc.github.io/.worktrees/root-access-v2/public"
       ],
       "port": 8788
+    },
+    {
+      "name": "balance-sim",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8789",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/Users/ugurkoc/repos/root-access/.worktrees/balance-sim"
+      ],
+      "port": 8789
     }
   ]
 }
