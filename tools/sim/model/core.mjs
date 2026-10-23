@@ -42,9 +42,10 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     const row = summary[session.day - 1];
     if (prevEnd !== null && session.start > prevEnd) {
       const gap = session.start - prevEnd;
-      const ctx = buildCtx(state, mods, profile, 0);
       const before = state.credits;
-      for (const m of mods) if (m.offline) m.offline(state, gap, ctx);
+      // Modules see the gap in registry order, each with multipliers rebuilt after the previous one:
+      // the bar clears the boosts that were active at session end before jobs computes its earnings.
+      for (const m of mods) if (m.offline) m.offline(state, gap, buildCtx(state, mods, profile, 0));
       state.t += gap;
       state.day = session.day;
       const earned = state.credits - before;

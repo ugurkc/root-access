@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
 import { defaultModules } from '../model/registry.mjs';
-import { jobs } from '../model/mods/jobs.mjs';
+import { jobs, setRigged } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
 import { bar, barSpeed } from '../model/mods/bar.mjs';
 import { offline } from '../model/mods/offline.mjs';
@@ -119,4 +119,28 @@ test('the bar bonus makes day 1 earn more than taps and jobs alone', () => {
   assert.ok(withBar.metrics['bar.bars'] > 0);
   assert.ok(withBar.summary[0].credits > without.summary[0].credits,
     `${withBar.summary[0].credits} > ${without.summary[0].credits}`);
+});
+
+test('boosts active at session end do not scale offline earnings', () => {
+  // wifi is capped at level 1 so the shop cannot level it: a run pays exactly 3 and offline earnings
+  // are a known number of whole runs. ceo gets bought from rep but is not rigged, so it earns nothing away.
+  const capped = structuredClone(cfg); capped.jobs.maxLevel = 1;
+  const seen = [];
+  // Rigs do not exist yet (Task 6), so a helper rigs wifi at init and, ticking last in the gap loop,
+  // records what the bar looks like after every module's offline() has run.
+  const helper = {
+    id: 'helper',
+    init(state) { state.jobs.byId.wifi.lv = 1; setRigged(state, 'wifi', 'x'); },
+    tick() {},
+    offline(state, seconds, ctx) { seen.push({ speedMult: ctx.speedMult, boosts: bar.metrics(state, ctx)['bar.activeBoosts'] }); },
+    offers() { return []; },
+    buy() {},
+    metrics() { return {}; },
+  };
+  const r = run({ config: capped, profile: active, days: 2, modules: [taps, bar, jobs, offline, helper] });
+  const gaps = r.timeline.filter((e) => e.kind === 'offline');
+  assert.equal(gaps.length, 3);
+  assert.equal(gaps[0].earned, 3 * Math.floor(8 * 3600 / 6));
+  assert.deepEqual(seen.map((s) => s.boosts), [0, 0, 0]);
+  assert.deepEqual(seen.map((s) => s.speedMult), [1, 1, 1]);
 });
