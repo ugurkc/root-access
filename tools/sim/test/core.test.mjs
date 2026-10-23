@@ -38,3 +38,20 @@ test('a disabled module is skipped and offline is called across gaps', () => {
   assert.ok(on.timeline.filter(e => e.kind === 'offline').length === 3);
   assert.ok(on.summary[1].offlineEarned > 0);
 });
+
+test('a session runs exactly minutes×60×tps ticks and earns an exact amount', () => {
+  let ticks = 0;
+  const stub = { id: 'stub', init: () => {}, tick: (s, dt) => { ticks++; s.credits += 10 * dt; }, offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const day1 = run({ config: { schema: 1 }, profile: active, days: 1, modules: [stub] });
+  assert.ok(Math.abs(day1.summary[0].activeEarned - 7200) < 1e-6);
+  assert.equal(ticks, 12 * 60 * 2.5);
+  ticks = 0;
+  run({ config: { schema: 1 }, profile: active, days: 7, modules: [stub] });
+  assert.equal(ticks, 16200);
+});
+
+test('offline is not a firstEvent metric', () => {
+  const mod = { id: 'x', init: () => {}, tick: () => {}, offline: (s, secs) => { s.credits += secs; }, offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const r = run({ config: { schema: 1 }, profile: active, days: 2, modules: [mod] });
+  assert.equal(r.metrics['firstEvent:offline'], undefined);
+});

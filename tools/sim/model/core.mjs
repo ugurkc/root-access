@@ -19,6 +19,8 @@ export function sessionsFor(profile, days) {
 
 export function run({ config, profile, days = 7, modules = defaultModules() }) {
   const mods = modules.filter((m) => config[m.id]?.enabled !== false);
+  // state.t is simulated seconds since the first session began (gaps included), not since midnight
+  // of day 1, so timeline `t` and `session.start` are in different frames.
   const state = { t: 0, day: 1, credits: 0 };
   for (const m of mods) m.init(state, config);
 
@@ -30,7 +32,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   let activeSeconds = 0;
   const record = (event) => {
     timeline.push(event);
-    if (!(event.kind in firstEvent)) firstEvent[event.kind] = activeSeconds;
+    if (event.kind !== 'offline' && !(event.kind in firstEvent)) firstEvent[event.kind] = activeSeconds;
   };
 
   let prevEnd = null;
@@ -49,18 +51,21 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     }
     state.day = session.day;
 
+    // Integer tick count and time derived from the tick index, so neither the count nor t drifts.
     const dt = 1 / session.tps;
     const total = session.minutes * 60;
-    let elapsed = 0;
+    const ticks = Math.round(total * session.tps);
+    const sessionStartT = state.t;
+    const sessionStartActive = activeSeconds;
     let lastShopSecond = 0;
-    while (elapsed < total) {
+    for (let i = 1; i <= ticks; i++) {
       const ctx = buildCtx(state, mods, 1);
       const before = state.credits;
       for (const m of mods) m.tick(state, dt, ctx);
       row.activeEarned += state.credits - before;
-      state.t += dt;
-      elapsed += dt;
-      activeSeconds += dt;
+      const elapsed = i * dt;
+      state.t = sessionStartT + elapsed;
+      activeSeconds = sessionStartActive + elapsed;
       if (Math.floor(elapsed) > lastShopSecond) {
         lastShopSecond = Math.floor(elapsed);
         shop(state, ctx, profile, mods, session.tps, record);
