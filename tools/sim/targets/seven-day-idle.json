@@ -1,0 +1,6 @@
+[
+  { "id": "first-upgrade", "label": "First job level-up within 90 s", "metric": "firstEvent:level", "op": "<=", "value": 90, "profile": "all" },
+  { "id": "first-rig", "label": "First rig inside the first session", "metric": "firstEvent:rig", "op": "<=", "value": 480, "profile": "all" },
+  { "id": "daily-purchase", "label": "A purchase every day D2–D6", "metric": "purchasesPerDay:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" },
+  { "id": "d7-not-done", "label": "Something still to buy on day 7", "metric": "offersLeft.final", "op": ">=", "value": 1, "profile": "all" }
+]
