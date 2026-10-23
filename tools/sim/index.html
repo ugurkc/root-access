@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0708">
+<title>Root Access balance simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<link rel="stylesheet" href="./ui/style.css">
+</head>
+<body>
+<header>
+  <h1>BALANCE SIM</h1>
+  <span class="preset">preset <b id="preset-name">loading…</b></span>
+  <div class="toolbar">
+    <button id="reset" type="button">Reset to preset</button>
+    <label class="file-button">Import JSON<input id="import" type="file" accept=".json,.js,application/json,text/javascript"></label>
+    <button id="export-json" type="button">Export JSON</button>
+    <button id="export-js" type="button">Export config.js</button>
+  </div>
+  <span class="status"><span id="error-count" class="badge">…</span></span>
+</header>
+<main>
+  <section id="editor-section">
+    <h2>CONFIG</h2>
+    <ul id="other-errors" class="other-errors" hidden></ul>
+    <div id="editor"></div>
+  </section>
+  <section id="run-section">
+    <h2>RUN</h2>
+    <div class="run-controls">
+      <label for="profiles">profiles</label>
+      <select id="profiles" multiple></select>
+      <label for="days">days</label>
+      <input id="days" type="number" min="1" max="90" step="1" value="7">
+      <div class="actions">
+        <button id="run" class="primary" type="button" disabled>Run</button>
+        <span id="run-note" class="note"></span>
+      </div>
+    </div>
+    <div id="results"><p class="empty">No run yet.</p></div>
+  </section>
+</main>
+<script type="module" src="./ui/app.mjs"></script>
+</body>
+</html>

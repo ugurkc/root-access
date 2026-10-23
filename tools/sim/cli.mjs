@@ -17,6 +17,9 @@ import { validateProfile } from './model/profile.mjs';
 import { evaluate, validateTargets } from './model/targets.mjs';
 import { sweep } from './model/sweep.mjs';
 import { toJs, fromJs } from './model/convert.mjs';
+import { fmt } from './ui/format.mjs';
+
+export { fmt };
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const DEFAULT_PROFILES = ['active', 'casual'];
@@ -121,17 +124,6 @@ function parseDays(value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new CliError(`--days expects a positive integer, got ${JSON.stringify(value)}`, 2);
   return n;
-}
-
-// Credits like the game shows them: 999 → "999", 1234 → "1.23K", then M, B, T…
-export function fmt(n) {
-  if (!Number.isFinite(n)) return '∞';
-  if (n < 0) return '-' + fmt(-n);
-  if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : String(Math.floor(n));
-  const u = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp'];
-  let i = -1;
-  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
-  return (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : String(Math.floor(n))) + u[i];
 }
 
 function table(rows) {
