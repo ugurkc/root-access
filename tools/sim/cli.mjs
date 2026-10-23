@@ -1,15 +1,20 @@
 #!/usr/bin/env node
-// Balance simulator CLI. Exit codes: 0 ok, 1 validation errors or failed verdicts, 2 usage.
+// Balance simulator CLI. Exit codes: 0 ok, 1 errors or failed verdicts, 2 usage.
 //
 //   node tools/sim/cli.mjs validate --config <path> | --targets <path>
 //   node tools/sim/cli.mjs run --config <path> [--profile <id|path>]… [--days 7] [--targets <path>] [--json]
+//   node tools/sim/cli.mjs sweep --config <path> --param <path> --values a,b [--param2 … --values2 …] [--json]
+//   node tools/sim/cli.mjs convert --to js|json --in <path> --out <path>
 import { parseArgs } from 'node:util';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { basename, resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { run } from './model/core.mjs';
 import { validateConfig } from './model/config.mjs';
 import { evaluate, validateTargets } from './model/targets.mjs';
+import { sweep } from './model/sweep.mjs';
+import { toJs, fromJs } from './model/convert.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const DEFAULT_PROFILES = ['active', 'casual'];
@@ -22,6 +27,15 @@ commands
   run --config <path> [--profile <id|path>]... [--days N] [--targets <path>] [--json]
                                     simulate each profile (default: ${DEFAULT_PROFILES.join(', ')}) and,
                                     with targets, print the verdicts; exit 1 when any verdict fails
+  sweep --config <path> --param <cfg path> --values a,b,c [--param2 <cfg path> --values2 d,e]
+        [--profile <id|path>]... [--days N] [--targets <path>] [--json]
+                                    run every value combination; one row per combination with
+                                    passes/total, first rig time and offers left per profile.
+                                    Paths: jobs.list[wifi].cost, rigs.list[ceo].cost, racks.cost, items.list[2].pay
+                                    (quote them: zsh and bash expand unquoted brackets)
+  convert --to js --in <config.json> --out <config.js>
+  convert --to json --in <config.js> --out <config.json>
+                                    between the simulator's JSON and the game's window.RA_CONFIG script
   --help                            this text
 
 Profiles resolve by id from ${resolve(HERE, 'profiles')}/<id>.json or by path.`;
@@ -156,7 +170,85 @@ function cmdRun(args) {
   return failed ? 1 : 0;
 }
 
-const COMMANDS = { validate: cmdValidate, run: cmdRun };
+// "4,6,8" → [4, 6, 8]; "true,false" → booleans; anything else stays a string.
+function parseValues(text) {
+  return text.split(',').map((raw) => {
+    const v = raw.trim();
+    if (v === 'true' || v === 'false') return v === 'true';
+    const n = Number(v);
+    return v !== '' && Number.isFinite(n) ? n : v;
+  });
+}
+
+// --param/--values are required; --param2/--values2 are an optional second pair.
+function sweepParams(values) {
+  if (values.param === undefined || values.values === undefined) throw new CliError('sweep needs --param <cfg path> --values a,b,c', 2);
+  const params = [{ path: values.param, values: parseValues(values.values) }];
+  if (values.param2 !== undefined || values.values2 !== undefined) {
+    if (values.param2 === undefined || values.values2 === undefined) throw new CliError('--param2 and --values2 go together', 2);
+    params.push({ path: values.param2, values: parseValues(values.values2) });
+  }
+  return params;
+}
+
+const showCell = (v) => (v === null || v === undefined ? '-' : typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(1) : String(v));
+
+function cmdSweep(args) {
+  const { values } = parseArgs({ args, options: {
+    config: { type: 'string' }, profile: { type: 'string', multiple: true }, days: { type: 'string' },
+    targets: { type: 'string' }, json: { type: 'boolean', default: false },
+    param: { type: 'string' }, values: { type: 'string' }, param2: { type: 'string' }, values2: { type: 'string' },
+  } });
+  const params = sweepParams(values);
+  const days = parseDays(values.days);
+  const config = loadConfig(values.config);
+  const targets = loadTargets(values.targets);
+  const profiles = loadProfiles(values.profile ?? []);
+  let rows;
+  try {
+    rows = sweep({ config, profiles, targets, days, params });
+  } catch (e) {
+    throw new CliError(e.message);
+  }
+  if (values.json) { print(JSON.stringify(rows, null, 2)); return 0; }
+  const ids = Object.keys(profiles);
+  const header = [...params.map((p) => p.path), 'pass', ...ids.flatMap((id) => [`first-rig:${id}`, `offersLeft:${id}`])];
+  const body = rows.map((row) => [
+    ...params.map((p) => showCell(row.values[p.path])),
+    `${row.passes}/${row.total}`,
+    ...ids.flatMap((id) => [showCell(row.metrics[id]['firstEvent:rig']), showCell(row.metrics[id]['offersLeft.final'])]),
+  ]);
+  print(table([header, ...body]));
+  return 0;
+}
+
+// Any config.js, including hand-written ones: evaluate it with a bare `window` and read the assignment.
+function evaluateConfigJs(source, path) {
+  const sandbox = { window: {} };
+  try { runInNewContext(source, sandbox, { timeout: 1000 }); } catch (e) { throw new CliError(`${path}: ${e.message}`); }
+  if (!sandbox.window.RA_CONFIG || typeof sandbox.window.RA_CONFIG !== 'object') throw new CliError(`${path}: did not assign window.RA_CONFIG`);
+  return sandbox.window.RA_CONFIG;
+}
+
+function cmdConvert(args) {
+  const { values } = parseArgs({ args, options: { to: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' } } });
+  if (!values.in || !values.out) throw new CliError('convert needs --in <path> and --out <path>', 2);
+  if (values.to === 'js') {
+    writeFileSync(values.out, toJs(readJson(values.in)));
+  } else if (values.to === 'json') {
+    let source;
+    try { source = readFileSync(values.in, 'utf8'); } catch (e) { throw new CliError(`${values.in}: ${e.message}`); }
+    let cfg;
+    try { cfg = fromJs(source); } catch { cfg = evaluateConfigJs(source, values.in); }
+    writeFileSync(values.out, JSON.stringify(cfg, null, 2) + '\n');
+  } else {
+    throw new CliError(`--to expects js or json, got ${JSON.stringify(values.to)}`, 2);
+  }
+  print(`wrote ${values.out}`);
+  return 0;
+}
+
+const COMMANDS = { validate: cmdValidate, run: cmdRun, sweep: cmdSweep, convert: cmdConvert };
 
 export function main(argv) {
   const [command, ...rest] = argv;

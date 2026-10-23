@@ -135,3 +135,59 @@ test('--help exits 0 with usage; an unknown command exits 2 with usage', () => {
   assert.match(u.out + u.err, /usage/i);
   assert.equal(cli().code, 2);
 });
+
+test('sweep: one row per value, with passes/total and per-profile first rig and offers left', () => {
+  const r = cli('sweep', '--config', PRESET, '--targets', TARGETS, '--param', 'jobs.list[wifi].cost', '--values', '6,12');
+  assert.equal(r.code, 0, r.out + r.err);
+  const rows = r.out.trim().split('\n');
+  assert.match(rows[0], /jobs\.list\[wifi\]\.cost/);
+  assert.match(rows[0], /pass/);
+  assert.match(rows[0], /first-rig:active/);
+  assert.match(rows[0], /offersLeft:casual/);
+  assert.equal(rows.length, 3, r.out);
+  assert.match(rows[1], /^\s*6\s+7\/10\s/);
+  assert.match(rows[2], /^\s*12\s+\d+\/10\s/);
+});
+
+test('sweep --json: the raw grid, two params', () => {
+  const r = cli('sweep', '--config', PRESET, '--profile', 'casual', '--days', '2', '--param', 'racks.cost', '--values', '400,800',
+    '--param2', 'taps.enabled', '--values2', 'true,false', '--json');
+  assert.equal(r.code, 0, r.out + r.err);
+  const rows = JSON.parse(r.out);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows[3].values, { 'racks.cost': 800, 'taps.enabled': false });
+  assert.deepEqual(Object.keys(rows[0].metrics), ['casual']);
+});
+
+test('sweep: --param and --values are required and must have matching pairs', () => {
+  assert.equal(cli('sweep', '--config', PRESET, '--values', '1,2').code, 2);
+  assert.equal(cli('sweep', '--config', PRESET, '--param', 'racks.cost').code, 2);
+  assert.equal(cli('sweep', '--config', PRESET, '--param', 'racks.cost', '--values', '1', '--param2', 'taps.rate').code, 2);
+  assert.equal(cli('sweep', '--config', PRESET, '--param2', 'racks.cost', '--values2', '1').code, 2);
+  const r = cli('sweep', '--config', PRESET, '--param', 'racks.nope', '--values', '1');
+  assert.equal(r.code, 1);
+  assert.match(r.out, /racks\.nope/);
+});
+
+test('convert: --to js writes window.RA_CONFIG that fromJs reads back equal; --to json reverses it', async () => {
+  const { fromJs } = await import('../model/convert.mjs');
+  const js = join(tmp, 'config.js');
+  const r = cli('convert', '--to', 'js', '--in', PRESET, '--out', js);
+  assert.equal(r.code, 0, r.out + r.err);
+  const source = readFileSync(js, 'utf8');
+  assert.ok(source.startsWith('window.RA_CONFIG = '));
+  assert.deepEqual(fromJs(source), JSON.parse(readFileSync(PRESET, 'utf8')));
+  const back = join(tmp, 'back.json');
+  assert.equal(cli('convert', '--to', 'json', '--in', js, '--out', back).code, 0);
+  assert.equal(JSON.stringify(JSON.parse(readFileSync(back, 'utf8'))), JSON.stringify(JSON.parse(readFileSync(PRESET, 'utf8'))));
+});
+
+test('convert: --to json falls back to evaluating a hand-written config.js', () => {
+  const src = write('hand.js', "// comment\nwindow.RA_CONFIG = { schema: 1, list: [1, 2,], };\n");
+  const out = join(tmp, 'hand.json');
+  const r = cli('convert', '--to', 'json', '--in', src, '--out', out);
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.deepEqual(JSON.parse(readFileSync(out, 'utf8')), { schema: 1, list: [1, 2] });
+  assert.equal(cli('convert', '--to', 'yaml', '--in', src, '--out', out).code, 2);
+  assert.equal(cli('convert', '--to', 'json', '--in', src).code, 2);
+});
