@@ -1,27 +1,23 @@
 // Balance simulator page: config editor driven by the schema, in-browser runs per profile,
-// import/export. State lives in memory only; every URL is relative so the page works from a sub-path.
+// import/export, charts, a target checklist and parameter sweeps. State lives in memory only;
+// every URL is relative so the page works from a sub-path.
 import { SHAPES, validateConfig } from '../model/config.mjs';
 import { run } from '../model/core.mjs';
 import { defaultModules } from '../model/registry.mjs';
 import { toJs, fromJs, PREFIX } from '../model/convert.mjs';
+import { setPath } from '../model/sweep.mjs';
 import { fmt, fmtMetric } from './format.mjs';
 import {
   EDITABLE_BLOCKS, NUMERIC_KINDS, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors,
 } from './editor.mjs';
+import { $, el, download, readFileEvent } from './dom.mjs';
+import { seriesFromResult, renderCharts, clearCharts } from './charts.mjs';
+import { createTargetsPanel } from './targets-panel.mjs';
+import { createSweepPanel } from './sweep-panel.mjs';
 
 const METRICS_SHOWN = ['rigs.count', 'items.placed', 'offersLeft.final', 'shop.capHits'];
-
-const $ = (id) => document.getElementById(id);
-const el = (tag, attrs = {}, children = []) => {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') node.className = v;
-    else if (k === 'text') node.textContent = v;
-    else if (v !== undefined && v !== false) node.setAttribute(k, v === true ? '' : v);
-  }
-  for (const c of children) node.append(c);
-  return node;
-};
+const DEFAULT_TARGETS = '../targets/seven-day-idle.json';
+const FROM_SWEEP = ' · from sweep';
 
 const state = {
   presetFile: '',   // manifest's preset filename
@@ -31,7 +27,10 @@ const state = {
   profiles: [],      // [{ id, ...profile }]
   errors: [],
   shapes: new Map(), // control path → shape, for formValue
+  runs: {},          // last run's results by profile id, what the charts and verdicts show
 };
+let targetsPanel;
+let sweepPanel;
 
 // ---------- loading ----------
 
@@ -46,8 +45,9 @@ async function load() {
   const manifest = await fetchJson('./manifest.json');
   state.presetFile = manifest.presets[0];
   state.presetName = state.presetFile;
-  const [preset, ...profiles] = await Promise.all([
+  const [preset, targets, ...profiles] = await Promise.all([
     fetchJson(`../presets/${state.presetFile}`),
+    fetchJson(DEFAULT_TARGETS),
     ...manifest.profiles.map((p) => fetchJson(`../profiles/${p}`)),
   ]);
   state.preset = preset;
@@ -55,13 +55,31 @@ async function load() {
   $('preset-name').textContent = state.presetName;
   const select = $('profiles');
   for (const p of profiles) select.append(el('option', { value: p.id, selected: true, text: p.id }));
+  targetsPanel = createTargetsPanel({ profileIds: () => state.profiles.map((p) => p.id) });
+  targetsPanel.setTargets(targets, { asDefault: true });
+  sweepPanel = createSweepPanel({
+    getConfig: () => state.config,
+    getProfiles: selectedProfiles,
+    getTargets: () => (targetsPanel.isValid() ? targetsPanel.targets() : null),
+    onPick: onPickSweep,
+  });
   setConfig(structuredClone(preset));
 }
 
+// Replaces the config the editor works on. The last run described another config, so it goes.
 function setConfig(cfg) {
   state.config = cfg;
   renderEditor();
   revalidate();
+  clearRuns();
+}
+
+function clearRuns() {
+  state.runs = {};
+  $('results').replaceChildren(el('p', { class: 'empty', text: 'No run yet.' }));
+  clearCharts($('charts'));
+  $('charts').append(el('p', { class: 'empty', text: 'Run to see credits and passive income over time.' }));
+  targetsPanel?.setRuns({});
 }
 
 // ---------- editor ----------
@@ -226,6 +244,7 @@ function revalidate() {
   badge.className = `badge ${n ? 'bad' : 'good'}`;
   $('run').disabled = n > 0;
   $('run-note').textContent = n ? 'fix the config to run' : '';
+  sweepPanel?.refreshPaths();
 }
 
 // ---------- run ----------
@@ -249,15 +268,41 @@ function onRun() {
     return;
   }
   const config = structuredClone(state.config);
+  const runs = {};
   for (const profile of profiles) {
     try {
       const r = run({ config: structuredClone(config), profile, days, modules: defaultModules() });
+      runs[profile.id] = r;
       results.append(renderResult(profile.id, r, days));
     } catch (e) {
       results.append(el('p', { class: 'error-box', text: `${profile.id}: ${e.message}` }));
       console.error(e);
     }
   }
+  state.runs = runs;
+  const series = Object.entries(runs).map(([id, r]) => {
+    const profile = state.profiles.find((p) => p.id === id);
+    return seriesFromResult(r, id, { day1StartHour: profile?.sessions?.day1?.hour ?? 0 });
+  });
+  renderCharts($('charts'), series);
+  targetsPanel.setRuns(runs);
+}
+
+// A sweep row was clicked: apply its values to a copy of the config and edit that one.
+function onPickSweep(values) {
+  const cfg = structuredClone(state.config);
+  try {
+    for (const [path, v] of Object.entries(values)) setPath(cfg, path, v);
+  } catch (e) {
+    alert(`Could not apply the sweep row: ${e.message}`);
+    return;
+  }
+  const shown = Object.entries(values).map(([p, v]) => `${p}=${v}`).join(', ');
+  const base = state.presetName.split(FROM_SWEEP)[0];
+  state.presetName = `${base}${FROM_SWEEP} (${shown})`;
+  $('preset-name').textContent = state.presetName;
+  setConfig(cfg);
+  $('editor-section').scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function renderResult(id, r, days) {
@@ -277,26 +322,16 @@ function renderResult(id, r, days) {
     const v = r.metrics[k];
     metrics.append(el('dt', { text: k }), el('dd', { text: k.startsWith('firstEvent:') ? `${fmtMetric(v)} s` : fmtMetric(v) }));
   }
-  return el('div', { class: 'result' }, [el('h3', { text: `${id} · ${days} day${days > 1 ? 's' : ''}` }), table, metrics]);
+  return el('div', { class: 'result' }, [el('h3', { text: `${id} · ${days} day${days > 1 ? 's' : ''}` }), el('div', { class: 'table-wrap' }, [table]), metrics]);
 }
 
 // ---------- import / export ----------
 
-function download(name, text, type) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = el('a', { href: url, download: name });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 async function onImport(event) {
-  const file = event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
   try {
-    const text = await file.text();
+    const file = await readFileEvent(event);
+    if (!file) return;
+    const { text } = file;
     const cfg = text.trimStart().startsWith(PREFIX) ? fromJs(text) : JSON.parse(text);
     if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('the file does not hold an object');
     state.presetName = `${file.name} (imported)`;

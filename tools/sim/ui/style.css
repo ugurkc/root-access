@@ -74,11 +74,17 @@ button.primary { background: var(--blue-deep); border-color: var(--blue-dim); co
 
 main {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(400px, 1.15fr) minmax(300px, 0.85fr) minmax(380px, 1fr);
   gap: 16px;
   padding: 16px;
+  min-width: 0;
 }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+main > section { min-width: 0; }
+@media (max-width: 1180px) {
+  main { grid-template-columns: minmax(360px, 1fr) minmax(300px, 1fr); }
+  #analysis-section { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } }
 
 section > h2, fieldset legend {
   font-family: var(--font-display);
@@ -89,6 +95,7 @@ section > h2, fieldset legend {
 section > h2 { margin: 0 0 12px; }
 
 fieldset {
+  min-inline-size: 0; /* a fieldset's default min-content size would push the column wider than the page */
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--panel);
@@ -159,13 +166,14 @@ td.remove button { padding: 0 6px; }
 .run-controls .actions { grid-column: 2; display: flex; gap: 10px; align-items: center; }
 .run-controls .note { color: var(--dim); font-size: 15px; }
 
-.result {
+.result, .panel {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--panel);
   padding: 8px 12px 12px;
   margin-bottom: 12px;
 }
+.result .table-wrap, .table-wrap { overflow-x: auto; max-width: 100%; }
 .result h3 { margin: 0 0 8px; font-size: 16px; color: var(--blue); font-weight: normal; }
 .result table td, .result table th { text-align: right; }
 .result table td:first-child, .result table th:first-child { text-align: right; color: var(--dim); }
@@ -174,3 +182,48 @@ td.remove button { padding: 0 6px; }
 .metrics dd { margin: 0; }
 .error-box { color: var(--red); border: 1px solid var(--red-dim); padding: 8px 12px; border-radius: 4px; }
 .empty { color: var(--dim); }
+
+/* ---------- analysis column: charts, targets, sweep ---------- */
+#analysis-section > h2 { margin-top: 4px; display: flex; align-items: center; gap: 10px; }
+#analysis-section > h2 .badge { font-family: var(--font-body); font-size: 15px; letter-spacing: 0; }
+#analysis-section > h2 .badge:empty { display: none; }
+.panel .toolbar { margin-bottom: 8px; }
+.panel .other-errors { margin-bottom: 8px; }
+
+.chart { position: relative; height: 240px; margin: 4px 0 12px; }
+.chart:last-child { margin-bottom: 0; }
+
+.targets-table th, .targets-table td { white-space: nowrap; }
+.targets-table td { vertical-align: top; }
+.targets-table input[type="text"] { min-width: 7em; }
+.targets-table .col-id input, .targets-table .col-label input { min-width: 9em; }
+.targets-table .col-metric input { min-width: 13em; }
+.targets-table .col-value input, .targets-table .col-from input, .targets-table .col-to input { width: 4.5em; }
+.targets-table .col-op select, .targets-table .col-profile select { width: auto; }
+.targets-table td.verdict { font-size: 16px; padding-left: 10px; border-left: 1px solid var(--border); }
+.targets-table td.verdict small { color: var(--dim); font-size: 14px; }
+.targets-table td.verdict .mark { font-weight: bold; }
+.targets-table td.verdict.pass .mark { color: var(--blue); }
+.targets-table td.verdict.fail .mark, .targets-table td.verdict .error-text { color: var(--red); }
+.targets-table th.verdict { color: var(--blue); border-left: 1px solid var(--border); padding-left: 10px; }
+.targets-table td.remove button { padding: 0 6px; }
+.targets-table .empty { white-space: normal; }
+.dim { color: var(--dim); }
+
+.sweep-controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.sweep-controls label { color: var(--dim); }
+.sweep-controls label .opt { color: var(--blue-dim); }
+.sweep-controls .actions { grid-column: 2; display: flex; gap: 10px; align-items: center; }
+.sweep-controls .note { color: var(--dim); font-size: 15px; }
+button.busy { color: var(--red); border-color: var(--red-dim); }
+.sweep-table td, .sweep-table th { text-align: right; }
+.sweep-table td.value { color: var(--blue); }
+.sweep-table td.pass { color: var(--blue); }
+.sweep-table tr.pick { cursor: pointer; }
+.sweep-table tr.pick:hover, .sweep-table tr.pick:focus { outline: 1px solid var(--blue-dim); outline-offset: -1px; }
