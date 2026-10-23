@@ -3,11 +3,15 @@
 // speed bonus (speed − 1) × grow, decor comfort round(comfort × grow); tech comfort is flat when
 // `items.techComfortFlat`. The upgrade from level lv costs cost × r^lv.
 //
-// Multipliers: payMult = Π itemPay, speedMult = Π itemSpeed, comfortMult = 1 + comfort / 100 where
-// comfort is the placed items' comfort plus the average comfort of decor events (events.mjs).
+// Multipliers: payMult = Π itemPay, speedMult = Π itemSpeed, comfortMult = 1 + roomComfort / 100
+// where roomComfort is the placed items' comfort plus the average comfort of decor events
+// (events.mjs). Placement changes only in buy(), so `state.items` caches the placed list and the
+// three totals there; multipliers() and offers() read the cache.
 //
 // The layout of `state.items` is private; events.mjs uses `placedItems(state, cfg)`.
-// items.mjs and events.mjs import each other's functions only, so the cycle is harmless.
+// items.mjs and events.mjs import each other. The cycle is safe only while every cross-import
+// is a function declaration called at run time: nothing here or there may use the other
+// module's bindings during module evaluation.
 import { runningIncome } from './jobs.mjs';
 import { freeLarge, freeSmall, freeDecor, takeLarge, takeSmall, takeDecor } from './racks.mjs';
 import { eventsComfort, eventComfortOf } from './events.mjs';
@@ -32,14 +36,34 @@ export function itemComfort(cfg, item, lv) {
 }
 
 // Placed items with their level: [{ item, lv }].
-export function placedItems(state, cfg) {
-  return cfg.items.list
-    .filter((item) => item.id in state.items.placed)
-    .map((item) => ({ item, lv: state.items.placed[item.id] }));
+export function placedItems(state) {
+  return state.items.placedList;
 }
 
-export function totalComfort(state, cfg) {
-  return placedItems(state, cfg).reduce((sum, { item, lv }) => sum + itemComfort(cfg, item, lv), 0);
+// Comfort of the placed items alone.
+export function totalComfort(state) {
+  return state.items.comfort;
+}
+
+// Comfort the room runs at: placed items plus the average of their decor events.
+export function roomComfort(state, cfg) {
+  return totalComfort(state) + eventsComfort(state, cfg);
+}
+
+// Recompute the cache from `placed`; called at init and after every buy.
+function refresh(state, cfg) {
+  const placedList = cfg.items.list
+    .filter((item) => item.id in state.items.placed)
+    .map((item) => ({ item, lv: state.items.placed[item.id] }));
+  let payMult = 1;
+  let speedMult = 1;
+  let comfort = 0;
+  for (const { item, lv } of placedList) {
+    payMult *= itemPay(cfg, item, lv);
+    speedMult *= itemSpeed(cfg, item, lv);
+    comfort += itemComfort(cfg, item, lv);
+  }
+  Object.assign(state.items, { placedList, payMult, speedMult, comfort });
 }
 
 const slotHelpers = (item) => {
@@ -59,8 +83,9 @@ function effectRatio(cfg, item, from, to, comfortNow) {
 export const items = {
   id: 'items',
 
-  init(state) {
+  init(state, config) {
     state.items = { placed: {} };
+    refresh(state, config);
   },
 
   tick() {},
@@ -71,7 +96,7 @@ export const items = {
   offers(state, ctx) {
     const cfg = state.config;
     const base = state.jobs ? runningIncome(state, cfg, ctx) : 0;
-    const comfortNow = totalComfort(state, cfg) + eventsComfort(state, cfg);
+    const comfortNow = roomComfort(state, cfg);
     const out = [];
     for (const item of cfg.items.list) {
       const lv = state.items.placed[item.id] ?? 0;
@@ -81,12 +106,13 @@ export const items = {
         out.push({ id: PLACE_PREFIX + item.id, cost: item.cost, gainPerSec: gain, kind: 'item' });
       } else if (lv < cfg.items.maxLevel) {
         const gain = base * (effectRatio(cfg, item, lv, lv + 1, comfortNow) - 1);
-        out.push({ id: LEVEL_PREFIX + item.id, cost: item.cost * cfg.items.r ** lv, gainPerSec: gain, kind: 'level' });
+        out.push({ id: LEVEL_PREFIX + item.id, cost: item.cost * cfg.items.r ** lv, gainPerSec: gain, kind: 'itemLevel' });
       }
     }
     return out;
   },
 
+  // Placing takes the slot first, so a missing slot throws before anything is recorded.
   buy(state, offerId) {
     const cfg = state.config;
     if (offerId.startsWith(PLACE_PREFIX)) {
@@ -96,26 +122,21 @@ export const items = {
     } else {
       state.items.placed[offerId.slice(LEVEL_PREFIX.length)] += 1;
     }
+    refresh(state, cfg);
   },
 
   multipliers(state) {
-    const cfg = state.config;
-    let payMult = 1;
-    let speedMult = 1;
-    for (const { item, lv } of placedItems(state, cfg)) {
-      payMult *= itemPay(cfg, item, lv);
-      speedMult *= itemSpeed(cfg, item, lv);
-    }
-    return { payMult, speedMult, comfortMult: 1 + (totalComfort(state, cfg) + eventsComfort(state, cfg)) / 100 };
+    const { payMult, speedMult } = state.items;
+    return { payMult, speedMult, comfortMult: 1 + roomComfort(state, state.config) / 100 };
   },
 
   metrics(state) {
     const cfg = state.config;
-    const placed = placedItems(state, cfg);
+    const placed = placedItems(state);
     const out = {
       'items.placed': placed.length,
       'items.levels': placed.reduce((sum, { lv }) => sum + lv, 0),
-      'comfort.total': totalComfort(state, cfg),
+      'comfort.total': totalComfort(state),
     };
     for (const item of cfg.items.list) out[`items.${item.id}.level`] = state.items.placed[item.id] ?? 0;
     return out;

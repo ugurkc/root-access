@@ -2,6 +2,8 @@
 // adds its `event.boost` comfort for `event.dur` seconds. Modelled as a deterministic always-on
 // average with no timers or randomness: each placed decor item with an event contributes
 // boost × dur × acceptRate / meanInterval comfort, which items.mjs folds into comfortMult.
+// `events.window` (how long an ask stays open) and `events.first` (the delay before the first ask)
+// are not modelled by the average.
 import { placedItems } from './items.mjs';
 
 // Average extra comfort of one item's event; 0 without an event or when the events block is off.
@@ -13,7 +15,7 @@ export function eventComfortOf(cfg, item) {
 
 export function eventsComfort(state, cfg) {
   if (!state.items) return 0;
-  return placedItems(state, cfg).reduce((sum, { item }) => sum + eventComfortOf(cfg, item), 0);
+  return placedItems(state).reduce((sum, { item }) => sum + eventComfortOf(cfg, item), 0);
 }
 
 export const events = {

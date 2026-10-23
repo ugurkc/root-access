@@ -86,3 +86,43 @@ test('a zero job time is reported: times, costs and growth must be positive', ()
   assert.ok(paths.includes('jobs.list[0].time'));
   assert.ok(paths.includes('offline.capHours'));
 });
+
+const broken = (mutate) => { const bad = structuredClone(preset); mutate(bad); return validateConfig(bad); };
+const reportsAt = (errs, path) => assert.ok(errs.some(e => e.path === path), JSON.stringify(errs));
+
+test('an item pay below 1 is reported: it is a multiplier', () => {
+  reportsAt(broken(c => { c.items.list[0].pay = 0.9; }), 'items.list[0].pay');
+});
+
+test('an item speed below 1 is reported', () => {
+  reportsAt(broken(c => { c.items.list[1].speed = 0.5; }), 'items.list[1].speed');
+});
+
+test('negative item comfort is reported', () => {
+  reportsAt(broken(c => { c.items.list[0].comfort = -1; }), 'items.list[0].comfort');
+});
+
+test('negative event boost or duration is reported', () => {
+  reportsAt(broken(c => { c.items.list[5].event.boost = -1; }), 'items.list[5].event.boost');
+  reportsAt(broken(c => { c.items.list[5].event.dur = -1; }), 'items.list[5].event.dur');
+});
+
+test('events.min + max must be positive: the mean interval divides', () => {
+  reportsAt(broken(c => { c.events.min = 0; c.events.max = 0; }), 'events.min');
+  assert.deepEqual(broken(c => { c.events.min = 0; c.events.max = 10; }), []);
+});
+
+test('rack slot counts are non-negative integers', () => {
+  reportsAt(broken(c => { c.racks.largeSlots = -1; }), 'racks.largeSlots');
+  reportsAt(broken(c => { c.racks.decorSlots = 1.5; }), 'racks.decorSlots');
+  reportsAt(broken(c => { c.racks.holds = -2; }), 'racks.holds');
+});
+
+test('items.maxLevel must be at least 1', () => {
+  reportsAt(broken(c => { c.items.maxLevel = 0; }), 'items.maxLevel');
+});
+
+test('tech items need a size and decor items must not have one', () => {
+  reportsAt(broken(c => { delete c.items.list[0].size; }), 'items.list[0].size');
+  reportsAt(broken(c => { c.items.list[5].size = 'small'; }), 'items.list[5].size');
+});

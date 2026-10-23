@@ -1,7 +1,7 @@
 // Rigs: one per job, bought once, automate the job (it loops by itself and runs while away).
 // A rig is small hardware and needs a free shelf (see racks.mjs). It goes through jobs.mjs's
-// `levelOf` / `isRigged` / `setRigged` and never reads `state.jobs` itself.
-import { levelOf, isRigged, setRigged, payFor } from './jobs.mjs';
+// `levelOf` / `isRigged` / `setRigged` / `runRate` and never reads `state.jobs` itself.
+import { levelOf, isRigged, setRigged, runRate } from './jobs.mjs';
 import { freeSmall, takeSmall } from './racks.mjs';
 
 const OFFER_PREFIX = 'rig:';
@@ -20,20 +20,19 @@ export const rigs = {
   tick() {},
 
   // Offered while the job is unlocked (level ≥ 1), not yet rigged and a shelf is free.
-  // gainPerSec is what the job earns continuously once automated: pay / time × speedMult.
+  // gainPerSec is what the job earns continuously once automated: its run rate.
   offers(state, ctx) {
     const cfg = state.config;
     if (!state.jobs || freeSmall(state, cfg) <= 0) return [];
     const out = [];
     for (const rig of cfg.rigs.list) {
       if (levelOf(state, rig.job) < 1 || isRigged(state, rig.job)) continue;
-      const job = cfg.jobs.list.find((j) => j.id === rig.job);
-      const gain = payFor(state, cfg, rig.job, ctx) / job.time * ctx.speedMult;
-      out.push({ id: offerIdFor(rig.job), cost: rig.cost, gainPerSec: gain, kind: 'rig' });
+      out.push({ id: offerIdFor(rig.job), cost: rig.cost, gainPerSec: runRate(state, cfg, rig.job, ctx), kind: 'rig' });
     }
     return out;
   },
 
+  // takeSmall throws when no shelf is free, before the job is marked.
   buy(state, offerId) {
     const cfg = state.config;
     const jobId = jobIdOf(offerId);

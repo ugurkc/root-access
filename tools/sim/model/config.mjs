@@ -1,11 +1,15 @@
 // Config schema and validator for the balance simulator.
-// A shape is num | pos | bool | str | enumOf([...]) | list(shape) | record(required, optional).
+// A shape is num | pos | atLeast(n) | nonNegInt | bool | str | enumOf([...]) | list(shape) | record(required, optional).
 // `pos` is a finite number > 0: durations, prices and growth factors that would divide by or loop on zero.
+// `atLeast(n)` is a finite number ≥ n: multipliers (≥ 1) and amounts that may be zero but not negative.
+// `nonNegInt` is an integer ≥ 0: slot counts.
 
 export const SCHEMA = 1;
 
 export const num = 'number';
 export const pos = { kind: 'pos' };
+export const atLeast = (min) => ({ kind: 'atLeast', min });
+export const nonNegInt = { kind: 'nonNegInt' };
 export const bool = 'boolean';
 export const str = 'string';
 export const enumOf = (values) => ({ kind: 'enum', values });
@@ -22,12 +26,12 @@ export const SHAPES = {
     list: list(record({ id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num })),
   }),
   rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) }),
-  racks: record({ enabled: bool, largeSlots: num, decorSlots: num, cost: pos, r: pos, holds: num }),
+  racks: record({ enabled: bool, largeSlots: nonNegInt, decorSlots: nonNegInt, cost: pos, r: pos, holds: nonNegInt }),
   items: record({
-    enabled: bool, maxLevel: num, r: pos, growPerLevel: num, techComfortFlat: bool,
+    enabled: bool, maxLevel: atLeast(1), r: pos, growPerLevel: num, techComfortFlat: bool,
     list: list(record(
-      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: pos, comfort: num },
-      { size: enumOf(['small', 'large']), pay: num, speed: num, event: record({ boost: num, dur: num }) },
+      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: pos, comfort: atLeast(0) },
+      { size: enumOf(['small', 'large']), pay: atLeast(1), speed: atLeast(1), event: record({ boost: atLeast(0), dur: atLeast(0) }) },
     )),
   }),
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
@@ -53,10 +57,17 @@ function check(value, shape, path, errs) {
     if (!ok) fail(`expected ${shape}, got ${describe(value)}`);
     return;
   }
+  const shown = typeof value === 'number' ? value : describe(value);
   if (shape.kind === 'pos') {
-    if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) {
-      fail(`expected positive number, got ${typeof value === 'number' ? value : describe(value)}`);
-    }
+    if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) fail(`expected positive number, got ${shown}`);
+    return;
+  }
+  if (shape.kind === 'atLeast') {
+    if (!(typeof value === 'number' && Number.isFinite(value) && value >= shape.min)) fail(`expected number ≥ ${shape.min}, got ${shown}`);
+    return;
+  }
+  if (shape.kind === 'nonNegInt') {
+    if (!(Number.isInteger(value) && value >= 0)) fail(`expected non-negative integer, got ${shown}`);
     return;
   }
   if (shape.kind === 'enum') {
@@ -112,6 +123,22 @@ function checkRigJobs(cfg, errs) {
   });
 }
 
+// The mean interval (min + max) / 2 divides the events' average comfort.
+function checkEventsInterval(cfg, errs) {
+  if (!clean(errs, 'events')) return;
+  if (!(cfg.events.min + cfg.events.max > 0)) errs.push({ path: 'events.min', message: 'min + max must be positive' });
+}
+
+// Tech items need a size to pick a slot; decor has its own slots and no size.
+function checkItemSizes(cfg, errs) {
+  if (!clean(errs, 'items.list') || !Array.isArray(cfg.items?.list)) return;
+  cfg.items.list.forEach((item, i) => {
+    const path = `items.list[${i}].size`;
+    if (item.type === 'tech' && !('size' in item)) errs.push({ path, message: 'tech items need a size' });
+    if (item.type === 'decor' && 'size' in item) errs.push({ path, message: 'decor items have no size' });
+  });
+}
+
 export function validateConfig(cfg) {
   const errs = [];
   check(cfg, record(SHAPES), '', errs);
@@ -120,5 +147,7 @@ export function validateConfig(cfg) {
   checkDuplicateIds(cfg, 'jobs', errs);
   checkDuplicateIds(cfg, 'items', errs);
   checkRigJobs(cfg, errs);
+  checkEventsInterval(cfg, errs);
+  checkItemSizes(cfg, errs);
   return errs;
 }

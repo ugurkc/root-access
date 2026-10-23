@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
 import { defaultModules } from '../model/registry.mjs';
-import { jobs, levelOf, isRigged } from '../model/mods/jobs.mjs';
+import { jobs, levelOf, isRigged, runRate } from '../model/mods/jobs.mjs';
 import { racks, freeLarge, freeSmall, freeDecor, takeSmall, rackCount, rackCost } from '../model/mods/racks.mjs';
 import { rigs } from '../model/mods/rigs.mjs';
 import { items, itemComfort, itemPay, itemSpeed, totalComfort } from '../model/mods/items.mjs';
 import { events, eventsComfort } from '../model/mods/events.mjs';
 const cfg = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
 const active = JSON.parse(readFileSync(new URL('../profiles/active.json', import.meta.url)));
-const ctx1 = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick: 0, t: 0, policy: active.policy };
+const ctx0 = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick: 0, t: 0, policy: active.policy };
 const item = (id) => cfg.items.list.find((i) => i.id === id);
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 
@@ -26,9 +26,9 @@ test('a rig is offered only once a rack gives it a shelf', () => {
   const s = room();
   jobs.buy(s, 'job:wifi:lv');
   assert.equal(levelOf(s, 'wifi'), 1);
-  assert.deepEqual(ids(rigs.offers(s, ctx1)), []);
+  assert.deepEqual(ids(rigs.offers(s, ctx0)), []);
   racks.buy(s, 'rack');
-  const [offer] = rigs.offers(s, ctx1);
+  const [offer] = rigs.offers(s, ctx0);
   assert.equal(offer.id, 'rig:wifi');
   assert.equal(offer.cost, 1000);
   assert.equal(offer.kind, 'rig');
@@ -36,21 +36,21 @@ test('a rig is offered only once a rack gives it a shelf', () => {
   rigs.buy(s, 'rig:wifi');
   assert.equal(isRigged(s, 'wifi'), true);
   assert.equal(freeSmall(s, cfg), 2);
-  assert.deepEqual(ids(rigs.offers(s, ctx1)), []);           // no second rig for wifi
-  assert.equal(rigs.metrics(s, ctx1)['rigs.count'], 1);
+  assert.deepEqual(ids(rigs.offers(s, ctx0)), []);           // no second rig for wifi
+  assert.equal(rigs.metrics(s, ctx0)['rigs.count'], 1);
 });
 
 test('a rig for a locked job is not offered', () => {
   const s = room();
   racks.buy(s, 'rack');
-  assert.deepEqual(ids(rigs.offers(s, ctx1)), []);
+  assert.deepEqual(ids(rigs.offers(s, ctx0)), []);
 });
 
 test('each rack costs 50× the previous and three fill the large slots', () => {
   const s = room();
   assert.equal(rackCost(s, cfg), 400);
-  assert.equal(racks.offers(s, ctx1)[0].cost, 400);
-  assert.equal(racks.offers(s, ctx1)[0].kind, 'rack');
+  assert.equal(racks.offers(s, ctx0)[0].cost, 400);
+  assert.equal(racks.offers(s, ctx0)[0].kind, 'rack');
   racks.buy(s, 'rack');
   assert.equal(rackCost(s, cfg), 20000);
   racks.buy(s, 'rack');
@@ -58,8 +58,8 @@ test('each rack costs 50× the previous and three fill the large slots', () => {
   assert.equal(rackCount(s), 3);
   assert.equal(freeLarge(s, cfg), 0);
   assert.equal(freeSmall(s, cfg), 9);
-  assert.deepEqual(racks.offers(s, ctx1), []);
-  const m = racks.metrics(s, ctx1);
+  assert.deepEqual(racks.offers(s, ctx0), []);
+  const m = racks.metrics(s, ctx0);
   assert.equal(m['racks.count'], 3);
   assert.equal(m['slots.largeFree'], 0);
   assert.equal(m['slots.smallFree'], 9);
@@ -73,7 +73,7 @@ test('taking a slot that is not free throws', () => {
 
 test('items are offered only with a free slot of their kind', () => {
   const s = room();
-  const offered = () => ids(items.offers(s, ctx1));
+  const offered = () => ids(items.offers(s, ctx0));
   assert.ok(offered().includes('item:gpu'));                 // large slot free
   assert.ok(!offered().includes('item:fiber'));              // no shelf yet
   assert.ok(offered().includes('item:lamp'));                // decor slot free
@@ -94,7 +94,7 @@ test('an item takes its slot when placed', () => {
   racks.buy(s, 'rack');
   items.buy(s, 'item:fiber');
   assert.equal(freeSmall(s, cfg), 2);
-  assert.deepEqual(ids(rigs.offers(s, ctx1)), []);           // wifi still locked, slot irrelevant
+  assert.deepEqual(ids(rigs.offers(s, ctx0)), []);           // wifi still locked, slot irrelevant
 });
 
 test('item effects grow by a fifth per level; tech comfort stays flat', () => {
@@ -111,14 +111,14 @@ test('item effects grow by a fifth per level; tech comfort stays flat', () => {
 test('an upgrade from level lv costs cost × 1.5^lv up to maxLevel', () => {
   const s = room();
   items.buy(s, 'item:lamp');
-  const lvOffer = () => items.offers(s, ctx1).find((o) => o.id === 'itemlv:lamp');
+  const lvOffer = () => items.offers(s, ctx0).find((o) => o.id === 'itemlv:lamp');
   assert.equal(lvOffer().cost, 3000);
-  assert.equal(lvOffer().kind, 'level');
+  assert.equal(lvOffer().kind, 'itemLevel');
   items.buy(s, 'itemlv:lamp');
   assert.equal(lvOffer().cost, 4500);
-  assert.equal(items.metrics(s, ctx1)['items.lamp.level'], 2);
+  assert.equal(items.metrics(s, ctx0)['items.lamp.level'], 2);
   for (let lv = 2; lv < 25; lv++) items.buy(s, 'itemlv:lamp');
-  assert.equal(items.metrics(s, ctx1)['items.lamp.level'], 25);
+  assert.equal(items.metrics(s, ctx0)['items.lamp.level'], 25);
   assert.equal(lvOffer(), undefined);
 });
 
@@ -127,7 +127,7 @@ test('events add a deterministic average comfort for placed decor', () => {
   assert.equal(eventsComfort(s, cfg), 0);
   items.buy(s, 'item:lamp');
   close(eventsComfort(s, cfg), 10 * 30 * 0.7 / 90);
-  close(events.metrics(s, ctx1)['events.comfortAvg'], 10 * 30 * 0.7 / 90);
+  close(events.metrics(s, ctx0)['events.comfortAvg'], 10 * 30 * 0.7 / 90);
   const off = structuredClone(cfg); off.events.enabled = false;
   const s2 = room(off);
   items.buy(s2, 'item:lamp');
@@ -144,7 +144,7 @@ test('multipliers multiply item effects and turn comfort into a percentage', () 
   assert.equal(m.speedMult, 1);
   assert.equal(totalComfort(s, cfg), 6);
   close(m.comfortMult, 1 + (6 + 10 * 30 * 0.7 / 90) / 100);
-  const k = items.metrics(s, ctx1);
+  const k = items.metrics(s, ctx0);
   assert.equal(k['items.placed'], 2);
   assert.equal(k['items.levels'], 2);
   assert.equal(k['comfort.total'], 6);
@@ -156,7 +156,7 @@ test('offers are finite numbers with unique ids', () => {
   const s = room();
   racks.buy(s, 'rack');
   jobs.buy(s, 'job:wifi:lv');
-  const all = [rigs, racks, items, events].flatMap((m) => m.offers(s, ctx1));
+  const all = [rigs, racks, items, events].flatMap((m) => m.offers(s, ctx0));
   const seen = new Set();
   for (const o of all) {
     assert.ok(Number.isFinite(o.cost) && Number.isFinite(o.gainPerSec), o.id);
@@ -182,4 +182,34 @@ test('a week of active play runs the full stack with finite metrics and no shop 
   for (const [k, v] of Object.entries(r.metrics)) {
     if (typeof v === 'number') assert.ok(Number.isFinite(v), `${k} is ${v}`);
   }
+});
+
+test('buying a rig or a small item without a free shelf throws through the module API', () => {
+  const s = room();
+  jobs.buy(s, 'job:wifi:lv');
+  assert.throws(() => rigs.buy(s, 'rig:wifi'), /small slot/);
+  assert.throws(() => items.buy(s, 'item:fiber'), /small slot/);
+  assert.equal(isRigged(s, 'wifi'), false);
+  assert.equal(items.metrics(s, ctx0)['items.fiber.level'], 0);
+});
+
+test('item and rig gainPerSec follow the running income', () => {
+  const s = room();
+  jobs.buy(s, 'job:wifi:lv');
+  jobs.tick(s, 0, ctx0);                                     // starts the wifi run: 3 / 6 s = 0.5/s
+  racks.buy(s, 'rack');
+  const gpu = items.offers(s, ctx0).find((o) => o.id === 'item:gpu');
+  close(gpu.gainPerSec, 0.5 * (1.25 * (101 / 100) - 1));    // +25 % pay, +1 comfort on an empty room
+  const rig = rigs.offers(s, ctx0).find((o) => o.id === 'rig:wifi');
+  close(rig.gainPerSec, runRate(s, cfg, 'wifi', ctx0));
+  assert.equal(rig.gainPerSec, 0.5);
+});
+
+test('with the racks block disabled the room has no slots: no rigs, no items', () => {
+  const noRacks = structuredClone(cfg); noRacks.racks.enabled = false;
+  const r = run({ config: noRacks, profile: active, days: 2, modules: defaultModules() });
+  assert.equal('racks.count' in r.metrics, false);
+  assert.equal(r.metrics['rigs.count'], 0);
+  assert.equal(r.metrics['items.placed'], 0);
+  assert.ok(r.metrics['jobs.wifi.level'] >= 1);
 });

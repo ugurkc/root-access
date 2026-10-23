@@ -348,13 +348,13 @@ Purpose: lock in the behaviour so later refactors of the model are caught. Run t
 - Create: `tools/sim/targets/seven-day-idle.json`
 - Test: `tools/sim/test/targets.test.mjs`
 
-Target format: `{ id, label, metric, op, value, profile: "all" | id, days?: [from, to] }`. Ops: `<=, <, >=, >, ==`. Metrics are resolved from `run().metrics`; `purchasesPerDay:min` with `days` resolves to the minimum over those days. `evaluate(targets, runsByProfile) → [{ id, profile, pass, actual, expected }]`.
+Target format: `{ id, label, metric, op, value, profile: "all" | id, days?: [from, to] }`. `firstEvent:level` is the first job level (item upgrades are kind `itemLevel`). Ops: `<=, <, >=, >, ==`. Metrics are resolved from `run().metrics`; `purchasesPerDay:min` with `days` resolves to the minimum over those days. `evaluate(targets, runsByProfile) → [{ id, profile, pass, actual, expected }]`.
 
 Starter targets file:
 
 ```json
 [
-  { "id": "first-upgrade", "label": "First level-up within 90 s", "metric": "firstEvent:level", "op": "<=", "value": 90, "profile": "all" },
+  { "id": "first-upgrade", "label": "First job level-up within 90 s", "metric": "firstEvent:level", "op": "<=", "value": 90, "profile": "all" },
   { "id": "first-rig", "label": "First rig inside the first session", "metric": "firstEvent:rig", "op": "<=", "value": 720, "profile": "all" },
   { "id": "daily-purchase", "label": "A rig or item every day D2–D6", "metric": "purchasesPerDay:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" },
   { "id": "d7-not-done", "label": "Something still to buy on day 7", "metric": "offersLeft.final", "op": ">=", "value": 1, "profile": "all" }

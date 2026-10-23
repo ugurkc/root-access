@@ -6,6 +6,7 @@
 //   setRigged(state, id, rigName)   mark a job as automated (rigs)
 //   isRigged(state, id)             read that mark (rigs, racks)
 //   levelOf(state, id)              the job's level; ≥ 1 means unlocked (rigs)
+//   runRate(state, cfg, id, ctx)    the job's credits per second while it runs (rigs)
 // Exported helpers take `cfg` explicitly so a test can hand them any config.
 import { offlineCapSeconds } from './offline.mjs';
 
@@ -36,11 +37,13 @@ export function payFor(state, cfg, id, ctx) {
   return payAt(cfg, jobCfg(state, id), state.jobs.byId[id].lv, ctx);
 }
 
-// Credits per second of one job while it runs.
-const rate = (state, cfg, job, ctx) => payFor(state, cfg, job.id, ctx) / job.time * ctx.speedMult;
+// Credits per second of one job while it runs: pay / time × speedMult.
+export function runRate(state, cfg, id, ctx) {
+  return payFor(state, cfg, id, ctx) / jobCfg(state, id).time * ctx.speedMult;
+}
 
 const sumWhere = (state, cfg, ctx, keep) =>
-  cfg.jobs.list.reduce((sum, job) => (keep(state.jobs.byId[job.id]) ? sum + rate(state, cfg, job, ctx) : sum), 0);
+  cfg.jobs.list.reduce((sum, job) => (keep(state.jobs.byId[job.id]) ? sum + runRate(state, cfg, job.id, ctx) : sum), 0);
 
 // Credits per second of the jobs currently in a run (what taps scale with).
 export function runningIncome(state, cfg, ctx) {

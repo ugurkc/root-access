@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
-import { jobs, costN, payFor, advanceRunning, setRigged, isRigged } from '../model/mods/jobs.mjs';
+import { jobs, costN, payFor, runRate, advanceRunning, setRigged, isRigged } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
 const cfg = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
 const active = JSON.parse(readFileSync(new URL('../profiles/active.json', import.meta.url)));
@@ -108,4 +108,10 @@ test('first level-up happens within 90 s of active play', () => {
   const r = run({ config: cfg, profile: active, days: 1, modules: [taps, jobs] });
   assert.ok(r.metrics['firstEvent:level'] <= 90, String(r.metrics['firstEvent:level']));
   assert.ok(r.metrics['jobs.wifi.level'] >= 1);
+});
+
+test('runRate is a job\'s credits per second while it runs, scaled by speedMult', () => {
+  const s = fresh(); jobs.init(s, cfg, active); s.jobs.byId.wifi.lv = 1;
+  assert.equal(runRate(s, cfg, 'wifi', ctx1), 0.5);
+  assert.equal(runRate(s, cfg, 'wifi', { ...ctx1, speedMult: 2 }), 1);
 });
