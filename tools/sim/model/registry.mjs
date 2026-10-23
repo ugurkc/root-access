@@ -28,6 +28,9 @@
 //     policy }                          the profile's buying policy
 //
 // Intended order once the modules exist: taps, bar, jobs, rigs, racks, items, events, offline.
+import { taps } from './mods/taps.mjs';
+import { jobs } from './mods/jobs.mjs';
+
 export function defaultModules() {
-  return [];
+  return [taps, jobs];
 }
