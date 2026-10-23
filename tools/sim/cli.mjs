@@ -19,8 +19,6 @@ import { sweep } from './model/sweep.mjs';
 import { toJs, fromJs } from './model/convert.mjs';
 import { fmt } from './ui/format.mjs';
 
-export { fmt };
-
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const DEFAULT_PROFILES = ['active', 'casual'];
 

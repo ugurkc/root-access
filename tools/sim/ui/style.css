@@ -70,7 +70,9 @@ button, .file-button {
 button:hover, .file-button:hover { border-color: var(--blue-dim); color: var(--blue); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button.primary { background: var(--blue-deep); border-color: var(--blue-dim); color: var(--blue); }
-.file-button input { display: none; }
+.file-button { position: relative; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); } /* focusable, not shown */
+.file-button:focus-within { outline: 2px solid var(--blue); outline-offset: 1px; }
 
 main {
   display: grid;
@@ -132,6 +134,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
   color: var(--red);
   font-size: 14px;
   max-width: 220px;
+  white-space: normal;
 }
 .invalid > .err, td.invalid .err { display: block; }
 
@@ -181,6 +184,10 @@ td.remove button { padding: 0 6px; }
 .metrics dt { color: var(--dim); }
 .metrics dd { margin: 0; }
 .error-box { color: var(--red); border: 1px solid var(--red-dim); padding: 8px 12px; border-radius: 4px; }
+#notice { grid-column: 1 / -1; margin: 0; }
+#notice[hidden] { display: none; }
+.stale { opacity: .45; }
+.stale-note { color: var(--red); font-size: 15px; margin: 0 0 8px; }
 .empty { color: var(--dim); }
 
 /* ---------- analysis column: charts, targets, sweep ---------- */

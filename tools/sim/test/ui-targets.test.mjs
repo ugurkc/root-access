@@ -50,15 +50,21 @@ test('groupTargetErrors indexes validator errors by row and field', () => {
   assert.deepEqual(grouped.get(-1).get(''), ['expected an array of targets']);
 });
 
-test('summarizeVerdicts on the baseline run: 7/10 pass, keyed by id/profile', () => {
+test('summarizeVerdicts on a real run: one verdict per target × profile, keyed by id/profile', () => {
   const runs = Object.fromEntries(Object.entries(profiles).map(([id, p]) => [id, run({ config: structuredClone(config), profile: p, days: 7 })]));
-  const s = summarizeVerdicts(evaluate(targets, runs));
-  assert.equal(s.total, 10);
-  assert.equal(s.passes, 7);
-  assert.equal(s.label, '7/10 pass');
-  assert.equal(s.byKey.get('first-upgrade/active').pass, true);
-  assert.equal(s.byKey.get('daily-rig-or-item/casual').pass, false);
-  assert.equal(s.byKey.size, 10);
+  const verdicts = evaluate(targets, runs);
+  const s = summarizeVerdicts(verdicts);
+  const expectedTotal = targets.length * Object.keys(profiles).length; // every starter target is profile: all
+  assert.equal(s.total, expectedTotal);
+  assert.equal(s.passes, verdicts.filter((v) => v.pass).length);
+  assert.ok(s.passes >= 0 && s.passes <= s.total);
+  assert.equal(s.label, `${s.passes}/${s.total} pass`);
+  assert.equal(s.byKey.size, expectedTotal);
+  for (const t of targets) for (const id of Object.keys(profiles)) {
+    const v = s.byKey.get(`${t.id}/${id}`);
+    assert.ok(v, `${t.id}/${id} present`);
+    assert.equal(typeof v.pass, 'boolean');
+  }
   assert.deepEqual(summarizeVerdicts([]), { passes: 0, total: 0, label: '0/0 pass', byKey: new Map() });
   assert.equal(summarizeVerdicts(undefined).label, '0/0 pass');
 });

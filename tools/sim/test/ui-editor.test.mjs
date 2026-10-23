@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SHAPES, validateConfig, num, pos, bool, str, atLeast, nonNegInt, enumOf, list, record } from '../model/config.mjs';
 import {
-  EDITABLE_BLOCKS, kindOf, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors,
+  EDITABLE_BLOCKS, kindOf, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors, holderPathFor, parsePath,
 } from '../ui/editor.mjs';
+import { parsePath as sweepParsePath } from '../model/sweep.mjs';
 import { fmt, fmtMetric } from '../ui/format.mjs';
 
 const preset = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
@@ -78,6 +79,8 @@ test('formValue: booleans from checkboxes and from text', () => {
 test('formValue: a list of scalars is comma-separated text', () => {
   assert.deepEqual(formValue(list(num), '25, 50'), [25, 50]);
   assert.deepEqual(formValue(list(num), ''), []);
+  assert.deepEqual(formValue(list(num), '1,,2,'), [1, 2], 'empty tokens are dropped');
+  assert.deepEqual(formValue(list(num), ' , '), []);
   const bad = formValue(list(num), '25, x');
   assert.equal(bad[0], 25);
   assert.ok(Number.isNaN(bad[1]));
@@ -166,4 +169,20 @@ test('fmt and fmtMetric', () => {
   assert.equal(fmtMetric(3), '3');
   assert.equal(fmtMetric(3.14159), '3.14');
   assert.equal(fmtMetric([1, 2.5]), '1, 2.50');
+});
+
+test('parsePath is the one from model/sweep.mjs, not a copy', () => {
+  assert.equal(parsePath, sweepParsePath);
+  assert.deepEqual(parsePath('jobs.list[wifi].cost'), [{ key: 'jobs', selector: undefined }, { key: 'list', selector: 'wifi' }, { key: 'cost', selector: undefined }]);
+});
+
+test('holderPathFor: the path itself, else the nearest ancestor with a holder, else undefined', () => {
+  const has = (p) => ['jobs.milestones', 'jobs.list[1].cost', 'jobs'].includes(p);
+  assert.equal(holderPathFor('jobs.milestones', has), 'jobs.milestones');
+  assert.equal(holderPathFor('jobs.milestones[1]', has), 'jobs.milestones');
+  assert.equal(holderPathFor('jobs.list[1].cost', has), 'jobs.list[1].cost');
+  assert.equal(holderPathFor('jobs.list[1].name', has), 'jobs');
+  assert.equal(holderPathFor('jobs.list[1]', has), 'jobs');
+  assert.equal(holderPathFor('racks.cost', has), undefined);
+  assert.equal(holderPathFor('', has), undefined);
 });

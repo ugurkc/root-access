@@ -39,11 +39,11 @@ export function createSweepPanel({ getConfig, getProfiles, getTargets, onPick })
     if (!Number.isInteger(days) || days < 1) { fail('days must be a positive integer'); return; }
     const profiles = getProfiles();
     if (profiles.length === 0) { fail('select at least one profile in the run panel'); return; }
-    if (!getTargets()) { fail('fix the targets to sweep'); return; }
+    const targets = getTargets();
+    if (!targets) { fail('fix the targets to sweep'); return; }
     const profilesById = Object.fromEntries(profiles.map((p) => [p.id, p]));
     const ids = Object.keys(profilesById);
     const config = structuredClone(getConfig());
-    const targets = getTargets();
     const combos = combinations(params);
 
     const head = el('tr', {}, [
@@ -81,7 +81,7 @@ export function createSweepPanel({ getConfig, getProfiles, getTargets, onPick })
   }
 
   function renderRow(row, params, ids) {
-    const tr = el('tr', { class: 'pick', tabindex: '0', title: 'load this combination into the editor' }, [
+    const tr = el('tr', { class: 'pick', role: 'button', tabindex: '0', title: 'load this combination into the editor' }, [
       ...params.map((p) => el('td', { class: 'value', text: showCell(row.values[p.path]) })),
       el('td', { class: row.passes === row.total ? 'pass' : '', text: `${row.passes}/${row.total}` }),
       ...ids.flatMap((id) => SHOWN.map((k) => el('td', { text: showCell(row.metrics[id][k]) }))),

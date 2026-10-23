@@ -10,7 +10,7 @@ const FIELDS = ['id', 'label', 'metric', 'op', 'value', 'profile', 'from', 'to']
 const showValue = (v) => (typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v));
 
 // { profileIds: () => [id…] } → panel. Rows are the editor's state; targets() derives the objects.
-export function createTargetsPanel({ profileIds }) {
+export function createTargetsPanel({ profileIds, notify = (m) => console.error(m) }) {
   let rows = [];
   let runs = {};        // last run results by profile id
   let defaults = [];    // what Reset restores
@@ -61,6 +61,7 @@ export function createTargetsPanel({ profileIds }) {
     else input = el('input', { type: 'text', list: f === 'metric' ? 'metric-list' : undefined, spellcheck: 'false' });
     if (input.tagName === 'SELECT' && ![...input.options].some((o) => o.value === row[f])) input.append(el('option', { value: row[f], text: row[f] || '—' }));
     input.value = row[f];
+    input.setAttribute('aria-label', `${f} of target ${i + 1}`);
     input.dataset.row = i;
     input.dataset.field = f;
     return input;
@@ -99,7 +100,7 @@ export function createTargetsPanel({ profileIds }) {
     const summary = summarizeVerdicts(evaluate(list, runs));
     badge.textContent = summary.label;
     badge.className = `badge ${summary.passes === summary.total ? 'good' : 'bad'}`;
-    rows.forEach((row, i) => {
+    rows.forEach((_, i) => {
       for (const td of table.querySelectorAll(`tr[data-row="${i}"] td.verdict`)) {
         const v = summary.byKey.get(`${list[i].id}/${td.dataset.profile}`);
         td.replaceChildren(...(v ? verdictCell(v) : [el('span', { class: 'dim', text: '—' })]));
@@ -140,7 +141,7 @@ export function createTargetsPanel({ profileIds }) {
       if (!Array.isArray(list)) throw new Error('the file does not hold an array of targets');
       setTargets(list);
     } catch (e) {
-      alert(`Import failed: ${e.message}`);
+      notify(`Targets import failed: ${e.message}`);
     }
   }
 

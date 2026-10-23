@@ -8,7 +8,7 @@ import { toJs, fromJs, PREFIX } from '../model/convert.mjs';
 import { setPath } from '../model/sweep.mjs';
 import { fmt, fmtMetric } from './format.mjs';
 import {
-  EDITABLE_BLOCKS, NUMERIC_KINDS, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors,
+  EDITABLE_BLOCKS, NUMERIC_KINDS, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors, holderPathFor,
 } from './editor.mjs';
 import { $, el, download, readFileEvent } from './dom.mjs';
 import { seriesFromResult, renderCharts, clearCharts } from './charts.mjs';
@@ -41,37 +41,64 @@ async function fetchJson(relative) {
   return res.json();
 }
 
+// One place for messages that used to be alert()s; hidden again by the next successful action.
+function notify(message) {
+  const box = $('notice');
+  box.textContent = message ?? '';
+  box.hidden = !message;
+}
+
 async function load() {
   const manifest = await fetchJson('./manifest.json');
+  if (!Array.isArray(manifest.presets) || typeof manifest.presets[0] !== 'string') throw new Error('manifest.json lists no preset');
+  if (!Array.isArray(manifest.profiles)) throw new Error('manifest.json lists no profiles');
   state.presetFile = manifest.presets[0];
-  state.presetName = state.presetFile;
   const [preset, targets, ...profiles] = await Promise.all([
     fetchJson(`../presets/${state.presetFile}`),
-    fetchJson(DEFAULT_TARGETS),
+    fetchJson(DEFAULT_TARGETS).catch((e) => e), // optional: the page works without a targets file
     ...manifest.profiles.map((p) => fetchJson(`../profiles/${p}`)),
   ]);
   state.preset = preset;
   state.profiles = profiles;
-  $('preset-name').textContent = state.presetName;
   const select = $('profiles');
   for (const p of profiles) select.append(el('option', { value: p.id, selected: true, text: p.id }));
-  targetsPanel = createTargetsPanel({ profileIds: () => state.profiles.map((p) => p.id) });
-  targetsPanel.setTargets(targets, { asDefault: true });
+  targetsPanel = createTargetsPanel({ profileIds: () => state.profiles.map((p) => p.id), notify });
+  if (targets instanceof Error || !Array.isArray(targets)) {
+    targetsPanel.setTargets([], { asDefault: true });
+    $('targets-errors').replaceChildren(el('li', { text: `default targets not loaded (${targets instanceof Error ? targets.message : 'not an array'}); add rows or import a targets JSON` }));
+    $('targets-errors').hidden = false;
+  } else {
+    targetsPanel.setTargets(targets, { asDefault: true });
+  }
   sweepPanel = createSweepPanel({
     getConfig: () => state.config,
     getProfiles: selectedProfiles,
     getTargets: () => (targetsPanel.isValid() ? targetsPanel.targets() : null),
     onPick: onPickSweep,
   });
-  setConfig(structuredClone(preset));
+  setConfig(structuredClone(preset), state.presetFile);
 }
 
-// Replaces the config the editor works on. The last run described another config, so it goes.
-function setConfig(cfg) {
+// Replaces the config the editor works on and the header's name for it. The editor is built for
+// the new config first; if that throws, nothing on the page changes and the error propagates.
+// The last run described another config, so it goes.
+function setConfig(cfg, presetName) {
+  const previous = { config: state.config, shapes: state.shapes };
   state.config = cfg;
-  renderEditor();
+  state.shapes = new Map();
+  let blocks;
+  try {
+    blocks = EDITABLE_BLOCKS.map(renderBlock);
+  } catch (e) {
+    Object.assign(state, previous);
+    throw e;
+  }
+  $('editor').replaceChildren(...blocks);
+  state.presetName = presetName;
+  $('preset-name').textContent = presetName;
   revalidate();
   clearRuns();
+  notify();
 }
 
 function clearRuns() {
@@ -80,16 +107,20 @@ function clearRuns() {
   clearCharts($('charts'));
   $('charts').append(el('p', { class: 'empty', text: 'Run to see credits and passive income over time.' }));
   targetsPanel?.setRuns({});
+  for (const node of document.querySelectorAll('.stale')) node.classList.remove('stale');
+  $('stale-note')?.remove();
+}
+
+// An edit after a run: the results, charts and verdicts still describe the config before the edit.
+// They stay readable but dimmed, with a note, until the next run (clearing them on every keystroke
+// would make tweak-and-compare impossible).
+function markStale() {
+  if (Object.keys(state.runs).length === 0 || $('stale-note')) return;
+  for (const id of ['results', 'charts', 'targets-table']) $(id).classList.add('stale');
+  $('results').before(el('p', { id: 'stale-note', class: 'stale-note', text: 'config changed since this run — run again' }));
 }
 
 // ---------- editor ----------
-
-function renderEditor() {
-  const root = $('editor');
-  root.replaceChildren();
-  state.shapes.clear();
-  for (const block of EDITABLE_BLOCKS) root.append(renderBlock(block));
-}
 
 function renderBlock(block) {
   const shape = SHAPES[block];
@@ -97,7 +128,7 @@ function renderBlock(block) {
   const isObject = cfgBlock !== null && typeof cfgBlock === 'object' && !Array.isArray(cfgBlock);
   const fs = el('fieldset', { 'data-block': block });
   const enabled = el('input', { type: 'checkbox', 'data-path': `${block}.enabled` });
-  enabled.checked = isObject && cfgBlock.enabled !== false;
+  enabled.checked = isObject && cfgBlock.enabled === true;
   enabled.disabled = !isObject;
   state.shapes.set(`${block}.enabled`, 'boolean');
   fs.classList.toggle('off', !enabled.checked);
@@ -166,7 +197,11 @@ function renderTable(path, f) {
     for (const c of columns) {
       const cellPath = `${path}[${i}].${c.name}`;
       const td = el('td', { class: c.name === 'name' ? 'name' : '', 'data-path': cellPath });
-      if (row && typeof row === 'object') td.append(control(cellPath, c), el('small', { class: 'err' }));
+      if (row && typeof row === 'object') {
+        const input = control(cellPath, c);
+        input.setAttribute('aria-label', cellPath);
+        td.append(input, el('small', { class: 'err' }));
+      }
       else td.append(el('small', { class: 'err', style: 'display:block', text: 'not an object' }));
       tr.append(td);
     }
@@ -187,6 +222,7 @@ function onEdit(event) {
   setAt(state.config, path, formValue(shape, raw));
   if (path.endsWith('.enabled')) input.closest('fieldset').classList.toggle('off', !input.checked);
   revalidate();
+  markStale();
 }
 
 function onClick(event) {
@@ -210,6 +246,7 @@ function rerenderBlock(block) {
   for (const key of [...state.shapes.keys()]) if (key.startsWith(`${block}.`)) state.shapes.delete(key);
   old.replaceWith(renderBlock(block));
   revalidate();
+  markStale();
 }
 
 // ---------- validation ----------
@@ -219,14 +256,24 @@ function revalidate() {
   const byPath = groupErrors(state.errors);
   const editor = $('editor');
   for (const node of editor.querySelectorAll('.invalid')) node.classList.remove('invalid');
+  // Holders are matched by iterating, not by selector, so paths need no CSS escaping. An error at a
+  // path without a holder (`jobs.milestones[1]`) shows at the nearest ancestor that has one.
+  const holders = new Map();
+  for (const node of editor.querySelectorAll('[data-path]:not(input):not(select)')) {
+    if (node.querySelector(':scope > .err')) holders.set(node.dataset.path, node);
+  }
   const placed = new Set();
+  const shown = new Map(); // holder path → messages
   for (const [path, messages] of byPath) {
-    const holder = editor.querySelector(`[data-path="${path}"]:not(input):not(select)`);
-    const err = holder?.querySelector(':scope > .err');
-    if (!err) continue;
-    holder.classList.add('invalid');
-    err.textContent = messages.join('; ');
+    const at = holderPathFor(path, (p) => holders.has(p));
+    if (at === undefined) continue;
+    const prefix = at === path ? '' : `${path.slice(at.length)}: `;
+    (shown.get(at) ?? shown.set(at, []).get(at)).push(...messages.map((m) => prefix + m));
     placed.add(path);
+  }
+  for (const [at, messages] of shown) {
+    holders.get(at).classList.add('invalid');
+    holders.get(at).querySelector(':scope > .err').textContent = messages.join('; ');
   }
   for (const fs of editor.querySelectorAll('fieldset')) {
     const block = fs.dataset.block;
@@ -267,11 +314,10 @@ function onRun() {
     results.append(el('p', { class: 'error-box', text: 'select at least one profile' }));
     return;
   }
-  const config = structuredClone(state.config);
   const runs = {};
   for (const profile of profiles) {
     try {
-      const r = run({ config: structuredClone(config), profile, days, modules: defaultModules() });
+      const r = run({ config: structuredClone(state.config), profile, days, modules: defaultModules() });
       runs[profile.id] = r;
       results.append(renderResult(profile.id, r, days));
     } catch (e) {
@@ -280,6 +326,8 @@ function onRun() {
     }
   }
   state.runs = runs;
+  for (const node of document.querySelectorAll('.stale')) node.classList.remove('stale');
+  $('stale-note')?.remove();
   const series = Object.entries(runs).map(([id, r]) => {
     const profile = state.profiles.find((p) => p.id === id);
     return seriesFromResult(r, id, { day1StartHour: profile?.sessions?.day1?.hour ?? 0 });
@@ -293,15 +341,12 @@ function onPickSweep(values) {
   const cfg = structuredClone(state.config);
   try {
     for (const [path, v] of Object.entries(values)) setPath(cfg, path, v);
+    const shown = Object.entries(values).map(([p, v]) => `${p}=${v}`).join(', ');
+    setConfig(cfg, `${state.presetName.split(FROM_SWEEP)[0]}${FROM_SWEEP} (${shown})`);
   } catch (e) {
-    alert(`Could not apply the sweep row: ${e.message}`);
+    notify(`Could not apply the sweep row: ${e.message}`);
     return;
   }
-  const shown = Object.entries(values).map(([p, v]) => `${p}=${v}`).join(', ');
-  const base = state.presetName.split(FROM_SWEEP)[0];
-  state.presetName = `${base}${FROM_SWEEP} (${shown})`;
-  $('preset-name').textContent = state.presetName;
-  setConfig(cfg);
   $('editor-section').scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -334,18 +379,14 @@ async function onImport(event) {
     const { text } = file;
     const cfg = text.trimStart().startsWith(PREFIX) ? fromJs(text) : JSON.parse(text);
     if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('the file does not hold an object');
-    state.presetName = `${file.name} (imported)`;
-    $('preset-name').textContent = state.presetName;
-    setConfig(cfg);
+    setConfig(cfg, `${file.name} (imported)`);
   } catch (e) {
-    alert(`Import failed: ${e.message}`);
+    notify(`Import failed: ${e.message}`); // the previous config and its run are untouched
   }
 }
 
 function onReset() {
-  state.presetName = state.presetFile;
-  $('preset-name').textContent = state.presetName;
-  setConfig(structuredClone(state.preset));
+  setConfig(structuredClone(state.preset), state.presetFile);
 }
 
 // ---------- wiring ----------

@@ -1,6 +1,9 @@
 // Pure helpers behind the config editor: shape → field descriptors, form text ⇄ config values,
 // and path access into a config object. No DOM here, so Node can test it.
 import { SHAPES } from '../model/config.mjs';
+import { parsePath } from '../model/sweep.mjs';
+
+export { parsePath }; // one path grammar: model/sweep.mjs owns it
 
 export const EDITABLE_BLOCKS = Object.keys(SHAPES).filter((b) => b !== 'schema');
 
@@ -46,12 +49,13 @@ export function columnsFor(shape) {
 // Raw control value (string, or boolean from a checkbox) → config value.
 // Empty text → undefined (the key is removed; the validator reports a required one as missing).
 // Non-numeric text for a numeric kind → NaN, so the validator, not the editor, rejects it.
-// A list of scalars is edited as comma-separated text; empty text is an empty list.
+// A list of scalars is edited as comma-separated text; empty tokens ('1,,2' or a trailing comma)
+// are dropped, so empty text is an empty list.
 export function formValue(shape, raw) {
   const kind = kindOf(shape);
   if (kind === 'bool') return typeof raw === 'boolean' ? raw : String(raw).trim() === 'true';
   const text = raw == null ? '' : String(raw).trim();
-  if (kind === 'list') return text === '' ? [] : text.split(',').map((s) => formValue(shape.of, s));
+  if (kind === 'list') return text.split(',').map((s) => s.trim()).filter((s) => s !== '').map((s) => formValue(shape.of, s));
   if (text === '') return undefined;
   if (kind === 'str' || kind === 'enum') return text;
   return Number(text);
@@ -62,18 +66,6 @@ export function displayValue(shape, value) {
   if (value === undefined || value === null) return '';
   if (kindOf(shape) === 'list') return value.map((v) => displayValue(shape.of, v)).join(', ');
   return String(value);
-}
-
-const SEGMENT_RE = /^([A-Za-z_]\w*)(?:\[([^\]]+)\])?$/;
-
-// 'jobs.list[2].cost' → [{ key: 'jobs' }, { key: 'list', selector: '2' }, { key: 'cost' }].
-export function parsePath(path) {
-  if (typeof path !== 'string' || path === '') throw new Error('empty path');
-  return path.split('.').map((seg) => {
-    const m = SEGMENT_RE.exec(seg);
-    if (!m) throw new Error(`malformed path ${JSON.stringify(path)} at ${JSON.stringify(seg)}`);
-    return { key: m[1], selector: m[2] };
-  });
 }
 
 // A selector is an index, or the entry's id (or job, for rigs). → index or -1.
@@ -142,6 +134,19 @@ export function blankRow(shape) {
     else row[f.name] = f.kind === 'str' ? '' : NaN;
   }
   return row;
+}
+
+// The path an error message is shown at: `path` itself when `has(path)`, else the nearest ancestor
+// that has a holder ('jobs.milestones[1]' → 'jobs.milestones' → 'jobs'); undefined when none does.
+export function holderPathFor(path, has) {
+  let p = path;
+  while (p) {
+    if (has(p)) return p;
+    const m = /^(.*?)(?:\[[^\]]*\]|\.[^.\[]*)$/.exec(p);
+    if (!m) return undefined;
+    p = m[1];
+  }
+  return undefined;
 }
 
 // Groups validator errors by the exact path they name; `errorsAt(map, path)` reads one field's.

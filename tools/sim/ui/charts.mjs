@@ -33,9 +33,24 @@ export function seriesFromResult(result, profileId, { day1StartHour = 0 } = {}) 
 
 // ---------- rendering (browser only) ----------
 
-const PROFILE_COLOURS = ['#35e0dc', '#ff3344', '#f0c050', '#9b7cf0', '#5cd65c'];
 const KIND_STYLE = { rig: 'triangle', rack: 'rect', item: 'circle' };
 let charts = [];
+let theme; // read from the page's CSS custom properties on first render
+
+function readTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+  theme = {
+    fg: v('--fg', '#ead9cf'), dim: v('--dim', '#8a7468'), border: v('--border', '#3a2a24'), bg: v('--bg', '#0a0708'),
+    grid: v('--panel-2', '#1d1614'), font: v('--font-body', 'monospace'),
+    profiles: [v('--blue', '#35e0dc'), v('--red', '#ff3344'), '#f0c050', '#9b7cf0', '#5cd65c'],
+  };
+  const Chart = globalThis.Chart;
+  Chart.defaults.color = theme.dim;
+  Chart.defaults.borderColor = theme.border;
+  Chart.defaults.font.family = theme.font;
+  Chart.defaults.font.size = 15;
+}
 
 export const chartsAvailable = () => typeof globalThis.Chart === 'function';
 
@@ -52,12 +67,8 @@ export function renderCharts(host, series) {
     host.append(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Charts need Chart.js (cdnjs); it did not load.' }));
     return;
   }
-  const Chart = globalThis.Chart;
-  Chart.defaults.color = '#8a7468';
-  Chart.defaults.borderColor = '#3a2a24';
-  Chart.defaults.font.family = "'VT323', 'Courier New', monospace";
-  Chart.defaults.font.size = 15;
-  const colourOf = (profile) => PROFILE_COLOURS[series.findIndex((s) => s.profile === profile) % PROFILE_COLOURS.length];
+  if (!theme) readTheme();
+  const colourOf = (profile) => theme.profiles[series.findIndex((s) => s.profile === profile) % theme.profiles.length];
   host.append(
     chart(host, 'credits', series, (s) => s.credits, (m) => m.cost, colourOf),
     chart(host, 'passive income $/s', series, (s) => s.passive, (m) => m.passive, colourOf),
@@ -81,7 +92,7 @@ function chart(host, title, series, pick, markerY, colourOf) {
     const points = series.flatMap((s) => s.markers.filter((m) => m.kind === kind).map((m) => ({ x: m.x, y: markerY(m), id: m.id, cost: m.cost, profile: s.profile })));
     datasets.push({
       type: 'scatter', label: kind, data: points, pointStyle: KIND_STYLE[kind], radius: 6, hoverRadius: 8, order: 1,
-      backgroundColor: points.map((p) => colourOf(p.profile)), borderColor: '#0a0708', borderWidth: 1,
+      backgroundColor: points.map((p) => colourOf(p.profile)), borderColor: theme.bg, borderWidth: 1,
     });
   }
   const c = new globalThis.Chart(canvas, {
@@ -92,7 +103,7 @@ function chart(host, title, series, pick, markerY, colourOf) {
       maintainAspectRatio: false,
       interaction: { mode: 'nearest', intersect: true },
       plugins: {
-        title: { display: true, text: title, color: '#ead9cf', font: { size: 16 } },
+        title: { display: true, text: title, color: theme.fg, font: { size: 16 } },
         legend: { labels: { usePointStyle: true, boxWidth: 8 } },
         tooltip: {
           callbacks: {
@@ -105,8 +116,8 @@ function chart(host, title, series, pick, markerY, colourOf) {
         },
       },
       scales: {
-        x: { type: 'linear', min: 0, title: { display: true, text: 'day' }, ticks: { stepSize: 1 }, grid: { color: '#2a1e1a' } },
-        y: { type: 'logarithmic', ticks: { callback: (v) => (v === 0 || isPowerOfTen(v) ? fmt(v) : '') }, grid: { color: '#2a1e1a' } },
+        x: { type: 'linear', min: 0, title: { display: true, text: 'day' }, ticks: { stepSize: 1 }, grid: { color: theme.grid } },
+        y: { type: 'logarithmic', ticks: { callback: (v) => (v === 0 || isPowerOfTen(v) ? fmt(v) : '') }, grid: { color: theme.grid } },
       },
     },
   });
