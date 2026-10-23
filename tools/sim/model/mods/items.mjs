@@ -8,7 +8,8 @@
 // (events.mjs). Placement changes only in buy(), so `state.items` caches the placed list and the
 // three totals there; multipliers() and offers() read the cache.
 //
-// The layout of `state.items` is private; events.mjs uses `placedItems(state, cfg)`.
+// The layout of `state.items` is private; events.mjs uses `placedItems(state)`; `totalComfort(state)`
+// is the placed items' comfort alone. Both read the cache and take no cfg.
 // items.mjs and events.mjs import each other. The cycle is safe only while every cross-import
 // is a function declaration called at run time: nothing here or there may use the other
 // module's bindings during module evaluation.

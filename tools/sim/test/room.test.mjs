@@ -142,7 +142,7 @@ test('multipliers multiply item effects and turn comfort into a percentage', () 
   const m = items.multipliers(s);
   assert.equal(m.payMult, 1.25);
   assert.equal(m.speedMult, 1);
-  assert.equal(totalComfort(s, cfg), 6);
+  assert.equal(totalComfort(s), 6);
   close(m.comfortMult, 1 + (6 + 10 * 30 * 0.7 / 90) / 100);
   const k = items.metrics(s, ctx0);
   assert.equal(k['items.placed'], 2);
