@@ -58,3 +58,11 @@ python3 -m http.server 8787
 Then open http://localhost:8787 (or your Mac's LAN IP on a phone).
 
 Design notes: [docs/plans/2026-10-17-prototype-design.md](docs/plans/2026-10-17-prototype-design.md).
+
+## Balance simulator
+
+`tools/sim/` runs the live game's economy from one config file and judges it against
+customer-journey targets. Static page at `tools/sim/index.html` (served with this
+repo's Pages at `/root-access/tools/sim/`, or locally with `python3 -m http.server`),
+plus a CLI with a JSON contract for agents: `node tools/sim/cli.mjs --help`.
+Contract and examples: [`tools/sim/README.md`](tools/sim/README.md).

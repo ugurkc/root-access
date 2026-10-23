@@ -77,6 +77,16 @@ never happened), `no run for profile x`, `no runs`, or `days [2, 9] exceed run l
 `t` is simulated seconds since the first session began, gaps included; `firstEvent:*` is seconds of
 active play. The `purchases` list above is abridged (a hand-picked selection; the real day 1 has 100 entries, in order).
 
+## UI
+
+`index.html` next to this file is the same model in a browser: a config editor built from
+`SHAPES` with inline validation, a run panel with the daily table and metrics, two charts
+(credits and passive income over simulated days, with rig/rack/item markers), the target
+checklist with live verdicts, and a sweep panel whose rows load back into the editor.
+Serve the repo with any static server and open `tools/sim/`; the page uses only relative
+URLs plus Chart.js from a CDN. Import/Export round-trip `config.json`, `config.js` and
+targets JSON.
+
 ## CLI
 
 Data (tables, JSON, validation reports) goes to stdout; diagnostics, refusals and usage go to stderr.
