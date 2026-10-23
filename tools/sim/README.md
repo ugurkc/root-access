@@ -64,7 +64,7 @@ never happened), `no run for profile x`, `no runs`, or `days [2, 9] exceed run l
   "profiles": { "active": {
     "summary": [ { "day": 1, "activeMinutes": 12, "credits": 56128.94, "incomePassive": 2835.66,
                    "offlineEarned": 0, "activeEarned": 2957405.27,
-                   "purchases": ["job:wifi:lv", "job:wifi:lv", "rack", "rig:wifi", "item:lamp", "item:gpu"] } ],
+                   "purchases": ["job:wifi:lv", "job:wifi:lv", "rack", "rig:wifi", "item:lamp", "item:gpu"] } ],  // ids abridged
     "timeline": [ { "t": 3.2, "day": 1, "kind": "level", "id": "job:wifi:lv", "cost": 6 } ],
     "metrics": { "income.passive": 241934.66, "rigs.count": 5, "offersLeft.final": 0,
                  "firstEvent:level": 3.2, "firstEvent:rig": 56,
@@ -75,13 +75,13 @@ never happened), `no run for profile x`, `no runs`, or `days [2, 9] exceed run l
 ```
 
 `t` is simulated seconds since the first session began, gaps included; `firstEvent:*` is seconds of
-active play. The `purchases` lists are complete in the real output (100 entries on day 1 here).
+active play. The `purchases` list above is abridged (a hand-picked selection; the real day 1 has 100 entries, in order).
 
 ## CLI
 
 Data (tables, JSON, validation reports) goes to stdout; diagnostics, refusals and usage go to stderr.
 Exit 0 ok, 1 validation errors or any failed verdict, 2 usage error (usage text follows on stderr).
-`node tools/sim/cli.mjs --help` prints every option. Quote config paths that contain brackets.
+`node tools/sim/cli.mjs --help` prints every option. Quote `--param`/`--param2` paths, since they contain brackets.
 
 ```
 $ node tools/sim/cli.mjs validate --config tools/sim/presets/v2-2026-10-23.json
@@ -110,6 +110,7 @@ targets: 7/10 pass
 ✓ first-rig/casual  First rig inside the first session: actual 89.33 (firstEvent:rig <= 480)
 ✗ d7-not-done/active  Something still to buy on day 7: actual 0 (offersLeft.final >= 1)
 ✗ daily-rig-or-item/active  A rig or item placed every day D2–D6: actual 0 (purchasesPerDay[rig,item]:min days 2–6 >= 1)
+...  (verdict lines trimmed; the real output has one per target and profile)
 ```
 
 Exit 1 because verdicts failed. `--profile` repeats (`--profile active --profile my/profile.json`),
@@ -139,7 +140,7 @@ wrote /tmp/config.json
 
 `--to js` writes `window.RA_CONFIG = {…};`, the file the game loads next to its `index.html`. `--to json`
 reads that form back; a hand-written `config.js` is evaluated in a sandbox, so only convert trusted files.
-The round trip is byte-for-byte identical on the preset.
+The round trip preserves every value of the preset exactly (`fromJs(toJs(cfg))` deep-equals `cfg`); only the whitespace formatting differs.
 
 ## Adding a mechanic
 
