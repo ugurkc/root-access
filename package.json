@@ -2,6 +2,7 @@
   "name": "root-access-tools",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test 'tools/sim/test/*.test.mjs'"
   }

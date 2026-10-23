@@ -34,7 +34,7 @@ test('core module loads', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `node --test tools/sim/test/`
+Run: `npm test` (Node 22 needs the glob form `node --test 'tools/sim/test/*.test.mjs'`; a bare directory is treated as a script to run.)
 Expected: FAIL, cannot find module `../model/core.mjs`.
 
 **Step 3: Minimal implementation**
@@ -45,7 +45,7 @@ Expected: FAIL, cannot find module `../model/core.mjs`.
   "name": "root-access-tools",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tools/sim/test/" }
+  "scripts": { "test": "node --test 'tools/sim/test/*.test.mjs'" }
 }
 ```
 

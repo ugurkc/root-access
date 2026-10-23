@@ -1,13 +1,17 @@
 // Config schema and validator for the balance simulator.
-// A shape is 'number' | 'boolean' | 'string', list(shape), or record(required, optional).
+// A shape is num | bool | str | enumOf([...]) | list(shape) | record(required, optional).
 
-const num = 'number';
-const bool = 'boolean';
-const str = 'string';
-const list = (of) => ({ kind: 'list', of });
-const record = (keys, optional = {}) => ({ kind: 'record', keys, optional });
+export const SCHEMA = 1;
 
-const SHAPES = {
+export const num = 'number';
+export const bool = 'boolean';
+export const str = 'string';
+export const enumOf = (values) => ({ kind: 'enum', values });
+export const list = (of) => ({ kind: 'list', of });
+export const record = (keys, optional = {}) => ({ kind: 'record', keys, optional });
+
+// Every block is required: a block switched off with `enabled: false` must still be complete.
+export const SHAPES = {
   schema: num,
   taps: record({ enabled: bool, rate: num, minMoney: num, advance: num }),
   bar: record({ enabled: bool, steps: num, bonusTaps: num, speed: num, speedDur: num }),
@@ -20,8 +24,8 @@ const SHAPES = {
   items: record({
     enabled: bool, maxLevel: num, r: num, growPerLevel: num, techComfortFlat: bool,
     list: list(record(
-      { id: str, type: str, name: str, cost: num, comfort: num },
-      { size: str, pay: num, speed: num, event: record({ boost: num, dur: num }) },
+      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: num, comfort: num },
+      { size: enumOf(['small', 'large']), pay: num, speed: num, event: record({ boost: num, dur: num }) },
     )),
   }),
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
@@ -31,24 +35,33 @@ const SHAPES = {
 export const BLOCKS = Object.keys(SHAPES);
 
 const isRecord = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
-const describe = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
+const describe = (v) => {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  if (typeof v === 'number' && !Number.isFinite(v)) return String(v);
+  return typeof v;
+};
 const join = (path, key) => (path ? `${path}.${key}` : key);
+const clean = (errs, prefix) => errs.every((e) => !e.path.startsWith(prefix));
 
 function check(value, shape, path, errs) {
+  const fail = (message) => errs.push({ path, message });
   if (typeof shape === 'string') {
-    if (typeof value !== shape) errs.push({ path, message: `expected ${shape}, got ${describe(value)}` });
+    const ok = typeof value === shape && (shape !== num || Number.isFinite(value));
+    if (!ok) fail(`expected ${shape}, got ${describe(value)}`);
+    return;
+  }
+  if (shape.kind === 'enum') {
+    if (!shape.values.includes(value)) fail(`expected one of ${shape.values.join(', ')}, got ${JSON.stringify(value)}`);
     return;
   }
   if (shape.kind === 'list') {
-    if (!Array.isArray(value)) {
-      errs.push({ path, message: `expected array, got ${describe(value)}` });
-      return;
-    }
-    value.forEach((item, i) => check(item, shape.of, `${path}[${i}]`, errs));
+    if (!Array.isArray(value)) fail(`expected array, got ${describe(value)}`);
+    else value.forEach((item, i) => check(item, shape.of, `${path}[${i}]`, errs));
     return;
   }
   if (!isRecord(value)) {
-    errs.push({ path, message: `expected object, got ${describe(value)}` });
+    fail(`expected object, got ${describe(value)}`);
     return;
   }
   for (const [key, keyShape] of Object.entries(shape.keys)) {
@@ -63,11 +76,29 @@ function check(value, shape, path, errs) {
   }
 }
 
+function checkSchema(cfg, errs) {
+  if (clean(errs, 'schema') && cfg.schema !== SCHEMA) {
+    errs.push({ path: 'schema', message: `unsupported schema ${cfg.schema}, expected ${SCHEMA}` });
+  }
+}
+
+function checkDuplicateIds(cfg, block, errs) {
+  if (!Array.isArray(cfg[block]?.list)) return;
+  const seen = new Set();
+  cfg[block].list.forEach((entry, i) => {
+    const id = entry?.id;
+    if (typeof id !== 'string') return;
+    if (seen.has(id)) errs.push({ path: `${block}.list[${i}].id`, message: `duplicate id ${JSON.stringify(id)}` });
+    seen.add(id);
+  });
+}
+
 function checkRigJobs(cfg, errs) {
-  if (!Array.isArray(cfg?.jobs?.list) || !Array.isArray(cfg?.rigs?.list)) return;
-  const jobIds = new Set(cfg.jobs.list.map((job) => job?.id));
+  if (!clean(errs, 'jobs.list') || !clean(errs, 'rigs.list')) return;
+  if (!Array.isArray(cfg.jobs?.list) || !Array.isArray(cfg.rigs?.list)) return;
+  const jobIds = new Set(cfg.jobs.list.map((job) => job.id));
   cfg.rigs.list.forEach((rig, i) => {
-    if (isRecord(rig) && !jobIds.has(rig.job)) {
+    if (typeof rig.job === 'string' && !jobIds.has(rig.job)) {
       errs.push({ path: `rigs.list[${i}].job`, message: `unknown job id ${JSON.stringify(rig.job)}` });
     }
   });
@@ -76,6 +107,10 @@ function checkRigJobs(cfg, errs) {
 export function validateConfig(cfg) {
   const errs = [];
   check(cfg, record(SHAPES), '', errs);
+  if (!isRecord(cfg)) return errs;
+  checkSchema(cfg, errs);
+  checkDuplicateIds(cfg, 'jobs', errs);
+  checkDuplicateIds(cfg, 'items', errs);
   checkRigJobs(cfg, errs);
   return errs;
 }
