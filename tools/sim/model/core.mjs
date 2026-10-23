@@ -87,13 +87,19 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
       summary[i].incomePassive = summary[i - 1].incomePassive;
     }
   }
-  for (const e of timeline) if (e.kind !== 'offline') summary[e.day - 1].purchases.push(e.id);
+  const byKind = {};
+  for (const e of timeline) {
+    if (e.kind === 'offline') continue;
+    summary[e.day - 1].purchases.push(e.id);
+    (byKind[e.kind] ??= new Array(days).fill(0))[e.day - 1]++;
+  }
 
   const finalCtx = buildCtx(state, mods, profile, 0);
   const metrics = {};
   for (const m of mods) Object.assign(metrics, m.metrics(state, finalCtx));
   for (const [kind, seconds] of Object.entries(firstEvent)) metrics[`firstEvent:${kind}`] = seconds;
   metrics.purchasesPerDay = summary.map((r) => r.purchases.length);
+  metrics.purchasesByKindPerDay = byKind;
   metrics['credits.final'] = state.credits;
   metrics['offersLeft.final'] = allOffers(state, finalCtx, mods).length;
   metrics['shop.capHits'] = shopStats.capHits;

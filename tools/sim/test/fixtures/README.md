@@ -36,3 +36,6 @@ caused it and say why in the message. Never regenerate just to make the test gre
   current preset, recorded here as the baseline rather than fixed.
 - Casual: Wi-Fi rig at 89 s of day 1, one rig a day through day 4, `offersLeft.final` is 2 and
   `purchasesPerDay` is `[72, 65, 48, 26, 47, 9, 5]`.
+- Both: the starter target `daily-rig-or-item` (a rig or item placed on each of days 2–6) fails.
+  Rigs and items run out early; only item levels are bought from day 3 (active) or day 5 (casual).
+  Recorded as a baseline finding of the preset, like the active day-7 dead end above.
