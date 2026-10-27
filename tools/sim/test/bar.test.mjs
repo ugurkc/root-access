@@ -7,9 +7,10 @@ import { jobs, setRigged } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
 import { bar, barSpeed } from '../model/mods/bar.mjs';
 import { offline } from '../model/mods/offline.mjs';
+import { base, ctx } from './fixtures/starter-base.mjs';
 const cfg = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
 const active = JSON.parse(readFileSync(new URL('../profiles/active.json', import.meta.url)));
-const ctx0 = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick: 0, t: 0, policy: active.policy };
+const ctx0 = { ...ctx(), policy: active.policy };
 const ctx1 = { ...ctx0, tapsThisTick: 1 };
 // A state as the core hands it to init: the config is set there, not by a module.
 const fresh = (config = cfg) => ({ t: 0, credits: 0, config });
@@ -54,6 +55,20 @@ test('two bars within 12 s stack to ×1.5 and expire one by one against state.t'
   assert.equal(bar.metrics(s, ctx0)['bar.activeBoosts'], 0);
   bar.tick(s, 0.4, ctx0);                                   // pruning drops the expired boosts
   assert.deepEqual(s.bar.boosts, []);
+});
+
+test('barMult 2 doubles the full-bar payout: 2 × bonusTaps × tapMoney', () => {
+  const config = base();                                     // steps 10, bonusTaps 15
+  const s = { t: 0, credits: 0, config };
+  for (const m of [jobs, taps, bar]) m.init(s, config);
+  for (let i = 0; i < 25; i++) jobs.buy(s, 'job:wifi:lv');  // 50 per 6 s running: a tap pays 0.25 × 50 / 6
+  jobs.tick(s, 0, { ...ctx(), policy: { restartManualJobs: true } });
+  const c = { ...ctx(), tapsThisTick: 1, barMult: 2 };
+  const perTap = tapMoney(s, config, c);
+  assert.ok(perTap > config.taps.minMoney, String(perTap));
+  for (let i = 0; i < 10; i++) bar.tick(s, 0.4, c);
+  assert.equal(s.credits, 2 * 15 * perTap);
+  assert.equal(bar.metrics(s, c)['bar.bars'], 1);
 });
 
 test('an absence clears the speed stack but keeps the partial bar', () => {

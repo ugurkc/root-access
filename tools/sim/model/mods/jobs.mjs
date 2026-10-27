@@ -1,12 +1,18 @@
 // Jobs: levelled hacks that run for `time` seconds of work and pay on completion.
 // A manual job runs once per start (the profile policy may restart it); a rigged job loops.
+// Work advances at speedMult (bar boosts, every job) × rigSpeedMult (tower, rigged jobs only), active
+// and offline alike.
 //
 // The layout of `state.jobs` is private to this module. Other modules use only these entry points:
 //   advanceRunning(state, seconds)  push every running job's work along (taps, bar)
-//   setRigged(state, id, rigName)   mark a job as automated (rigs)
-//   isRigged(state, id)             read that mark (rigs, racks)
+//   setRigged(state, id, rigName)   mark a job as automated. rigs.mjs is the only production caller;
+//                                   it also owns the slot count
+//   isRigged(state, id)             read that mark (rigs)
 //   levelOf(state, id)              the job's level; ≥ 1 means unlocked (rigs)
-//   runRate(state, cfg, id, ctx)    the job's credits per second while it runs (rigs)
+//   runRate(state, cfg, id, ctx, asRigged = isRigged)
+//                                   the job's credits per second while it runs; `asRigged` true values
+//                                   it at rig speed before the rig is bought (rigs)
+//   runsOf(state, id)               completed runs so far, active and offline (loot)
 // Exported helpers take `cfg` explicitly so a test can hand them any config.
 import { offlineCapSeconds } from './offline.mjs';
 
@@ -37,9 +43,13 @@ export function payFor(state, cfg, id, ctx) {
   return payAt(cfg, jobCfg(state, id), state.jobs.byId[id].lv, ctx);
 }
 
-// Credits per second of one job while it runs: pay / time × speedMult.
-export function runRate(state, cfg, id, ctx) {
-  return payFor(state, cfg, id, ctx) / jobCfg(state, id).time * ctx.speedMult;
+// Work seconds per real second: speedMult for every job, × rigSpeedMult for a rigged one.
+// A ctx without rigSpeedMult (older callers) runs at speedMult alone.
+const workSpeed = (ctx, rigged) => ctx.speedMult * (rigged ? ctx.rigSpeedMult ?? 1 : 1);
+
+// Credits per second of one job while it runs: pay / time × work speed.
+export function runRate(state, cfg, id, ctx, asRigged = state.jobs.byId[id].rigged) {
+  return payFor(state, cfg, id, ctx) / jobCfg(state, id).time * workSpeed(ctx, asRigged);
 }
 
 const sumWhere = (state, cfg, ctx, keep) =>
@@ -74,11 +84,16 @@ export function levelOf(state, id) {
   return state.jobs.byId[id].lv;
 }
 
+export function runsOf(state, id) {
+  return state.jobs.byId[id].runs;
+}
+
 const unlocked = (state, job) => state.jobs.rep >= job.unlock || state.jobs.byId[job.id].lv > 0;
 
 function finishRun(state, cfg, job, ctx) {
   state.credits += payFor(state, cfg, job.id, ctx);
   state.jobs.rep += job.rep;
+  state.jobs.byId[job.id].runs += 1;
 }
 
 export const jobs = {
@@ -88,7 +103,7 @@ export const jobs = {
     const byId = {};
     const cfgById = {};
     for (const job of config.jobs.list) {
-      byId[job.id] = { lv: 0, rigged: false, work: 0, running: false };
+      byId[job.id] = { lv: 0, rigged: false, work: 0, running: false, runs: 0 };
       cfgById[job.id] = job;
     }
     state.jobs = { rep: 0, byId, cfgById };
@@ -105,7 +120,7 @@ export const jobs = {
         j.work = 0;
       }
       if (!j.running) continue;
-      j.work += dt * ctx.speedMult;
+      j.work += dt * workSpeed(ctx, j.rigged);
       while (j.work >= job.time) {
         finishRun(state, cfg, job, ctx);
         j.work -= job.time;
@@ -126,9 +141,10 @@ export const jobs = {
     for (const job of cfg.jobs.list) {
       const j = state.jobs.byId[job.id];
       if (j.lv === 0 || !j.rigged) continue;
-      const runs = Math.floor(secs * ctx.speedMult / job.time);
+      const runs = Math.floor(secs * workSpeed(ctx, true) / job.time);
       state.credits += runs * payFor(state, cfg, job.id, ctx);
       state.jobs.rep += runs * job.rep;
+      j.runs += runs;
       j.work = 0;
     }
   },
@@ -137,9 +153,9 @@ export const jobs = {
     const cfg = state.config;
     const out = [];
     for (const job of cfg.jobs.list) {
-      const { lv } = state.jobs.byId[job.id];
+      const { lv, rigged } = state.jobs.byId[job.id];
       if (!unlocked(state, job) || lv >= cfg.jobs.maxLevel) continue;
-      const gain = (payAt(cfg, job, lv + 1, ctx) - payAt(cfg, job, lv, ctx)) / job.time * ctx.speedMult;
+      const gain = (payAt(cfg, job, lv + 1, ctx) - payAt(cfg, job, lv, ctx)) / job.time * workSpeed(ctx, rigged);
       out.push({ id: offerIdFor(job.id), cost: costN(state, cfg, job.id, 1), gainPerSec: gain, kind: 'level' });
     }
     return out;

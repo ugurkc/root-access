@@ -45,3 +45,11 @@ test('with the classes block off (no rack possible) rigs are never offered', () 
   assert.deepEqual(rigs.offers(state, ctx()), []);
   assert.equal(rigs.metrics(state)['slots.rigFree'], 0);
 });
+
+test('a rig offer values the job as rigged: gainPerSec scales with rigSpeedMult', () => {
+  const state = setup();
+  jobs.buy(state, 'job:wifi:lv');
+  classes.buy(state, 'class:rack');
+  const gain = (c) => rigs.offers(state, c).find((o) => o.id === 'rig:wifi').gainPerSec;
+  assert.equal(gain({ ...ctx(), rigSpeedMult: 2 }), 2 * gain(ctx()));
+});

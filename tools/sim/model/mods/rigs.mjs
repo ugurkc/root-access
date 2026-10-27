@@ -24,18 +24,20 @@ export const rigs = {
   tick() {},
 
   // Offered while the job is unlocked (level ≥ 1), not yet rigged and a rig slot is free.
-  // gainPerSec is what the job earns continuously once automated: its run rate.
+  // gainPerSec is what the job earns continuously once automated: its run rate as a rigged job
+  // (at rigSpeedMult, which the job does not enjoy yet).
   offers(state, ctx) {
     const cfg = state.config;
     if (!state.jobs || freeRigSlot(state) <= 0) return [];
     const out = [];
     for (const rig of cfg.rigs.list) {
       if (levelOf(state, rig.job) < 1 || isRigged(state, rig.job)) continue;
-      out.push({ id: offerIdFor(rig.job), cost: rig.cost, gainPerSec: runRate(state, cfg, rig.job, ctx), kind: 'rig' });
+      out.push({ id: offerIdFor(rig.job), cost: rig.cost, gainPerSec: runRate(state, cfg, rig.job, ctx, true), kind: 'rig' });
     }
     return out;
   },
 
+  // The core only buys what offers() listed, so the unlocked/unrigged checks live there.
   // Throws when no slot is free, before the job is marked.
   buy(state, offerId) {
     const cfg = state.config;

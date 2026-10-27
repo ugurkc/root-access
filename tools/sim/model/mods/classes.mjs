@@ -75,7 +75,7 @@ function gainOf(state, cfg, ctx, cls, from, to) {
   const passive = state.jobs ? passiveIncome(state, cfg, ctx) : 0;
   const tapsOn = Boolean(state.taps);                                  // tapMoney guards state.jobs itself
   const tapRate = (tapsOn ? tapMoney(state, cfg, ctx) : 0) * ctx.tps;
-  const barRate = state.bar ? tapRate * cfg.bar.bonusTaps / cfg.bar.steps : 0;
+  const barRate = state.bar ? tapRate * cfg.bar.bonusTaps / cfg.bar.steps * ctx.barMult : 0;   // today's payout rate
   const comfortGain = (running + tapRate) * (comfortRatio - 1);
   switch (cls.effect) {
     case 'pay': return running * (ratio - 1) + comfortGain;

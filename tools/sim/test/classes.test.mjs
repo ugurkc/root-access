@@ -4,7 +4,8 @@ import { base, ctx } from './fixtures/starter-base.mjs';
 import { classes, ownedClasses, totalComfort, rigSlots } from '../model/mods/classes.mjs';
 import { eventsComfort } from '../model/mods/events.mjs';
 import { jobs, runningIncome } from '../model/mods/jobs.mjs';
-import { taps } from '../model/mods/taps.mjs';
+import { taps, tapMoney } from '../model/mods/taps.mjs';
+import { bar } from '../model/mods/bar.mjs';
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 
@@ -126,4 +127,21 @@ test('gainPerSec scales the running income by the tier\'s effect; tap-side effec
   assert.ok(offer('router', 2).gainPerSec > 0);
   close(offer('desk', 0).gainPerSec, income * (102 / 100 - 1));       // tapMoney: only its 2 comfort offline
   assert.ok(offer('desk', 2).gainPerSec > offer('desk', 0).gainPerSec);
+});
+
+// The chair scales the full-bar payout, so its gain follows today's payout rate: tap money × tps ×
+// bonusTaps / steps × the barMult already in force, plus the comfort share.
+test('a chair offer values the bar payout rate at the current barMult', () => {
+  const config = base();
+  const state = { credits: 0, config };
+  for (const m of [taps, bar, jobs, classes]) m.init(state, config);
+  jobs.buy(state, 'job:wifi:lv');
+  jobs.tick(state, 0.01, { ...ctx(), policy: { restartManualJobs: true } });
+  const gain = (c) => classes.offers(state, c).find((o) => o.id === 'class:chair').gainPerSec;
+  for (const barMult of [1, 2]) {
+    const c = { ...ctx(), tps: 2, barMult };
+    const tapRate = tapMoney(state, config, c) * 2;
+    const comfortGain = (runningIncome(state, config, c) + tapRate) * (102 / 100 - 1);   // kitchen chair: comfort 2
+    close(gain(c), tapRate * 15 / 10 * barMult * (1.5 - 1) + comfortGain);
+  }
 });

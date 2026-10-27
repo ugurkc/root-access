@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
-import { jobs, costN, payFor, runRate, advanceRunning, setRigged, isRigged } from '../model/mods/jobs.mjs';
+import { jobs, costN, payFor, runRate, runsOf, advanceRunning, setRigged, isRigged } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
+import { base, ctx } from './fixtures/starter-base.mjs';
 const cfg = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
 const active = JSON.parse(readFileSync(new URL('../profiles/active.json', import.meta.url)));
-const ctx1 = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick: 0, t: 0, policy: active.policy };
+const ctx1 = { ...ctx(), policy: active.policy };
 // A state as the core hands it to init: the config is set there, not by a module.
 const fresh = (config = cfg) => ({ credits: 0, config });
 
@@ -114,4 +115,50 @@ test('runRate is a job\'s credits per second while it runs, scaled by speedMult'
   const s = fresh(); jobs.init(s, cfg, active); s.jobs.byId.wifi.lv = 1;
   assert.equal(runRate(s, cfg, 'wifi', ctx1), 0.5);
   assert.equal(runRate(s, cfg, 'wifi', { ...ctx1, speedMult: 2 }), 1);
+});
+
+// The starter fixture: wifi (time 6, pay 2) and stream (time 15, pay 8), both bought to level 1 unless noted.
+test('rigSpeedMult speeds up rigged jobs only, active and offline', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv'); jobs.buy(state, 'job:stream:lv');
+  setRigged(state, 'wifi', 'Script');
+  const c = { ...ctx(), rigSpeedMult: 2, policy: { restartManualJobs: true } };
+  jobs.tick(state, 3, c);                     // wifi: 3 s × 2 = 6 s of work → one run pays 2; stream: 3 s, no run
+  assert.equal(state.credits, 2);
+  assert.equal(runRate(state, state.config, 'wifi', c), 2 / 6 * 2);
+  assert.equal(runRate(state, state.config, 'stream', c), 8 / 15);
+  state.credits = 0;
+  jobs.offline(state, 60, c);                 // 60 s × 2 / 6 = 20 wifi runs; stream is not rigged
+  assert.equal(state.credits, 40);
+});
+
+test('runRate can value a job as if rigged before the rig is bought', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv');
+  const c = { ...ctx(), rigSpeedMult: 2 };
+  assert.equal(runRate(state, state.config, 'wifi', c), 2 / 6);          // not rigged: no rig speed
+  assert.equal(runRate(state, state.config, 'wifi', c, true), 2 / 6 * 2); // as rigged
+});
+
+test('a rigged job\'s level-up gain runs at rig speed too', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv');
+  const c = { ...ctx(), rigSpeedMult: 2 };
+  const gain = () => jobs.offers(state, c).find((o) => o.id === 'job:wifi:lv').gainPerSec;
+  assert.equal(gain(), 2 / 6);                // level 2 pays 4 per 6 s: +2 per 6 s
+  setRigged(state, 'wifi', 'Script');
+  assert.equal(gain(), 2 / 6 * 2);
+});
+
+test('runsOf counts completed runs, active and offline', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
+  jobs.tick(state, 12, ctx());                // 2 runs
+  jobs.offline(state, 60, ctx());             // 10 runs
+  assert.equal(runsOf(state, 'wifi'), 12);
+  assert.equal(runsOf(state, 'stream'), 0);
 });

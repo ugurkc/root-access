@@ -1,5 +1,6 @@
-// HACK bar: every `steps` taps fill it. A full bar pays `bonusTaps` taps of money and grants a job
-// speed boost for `speedDur` seconds; active boosts stack linearly (speed = 1 + speed × active).
+// HACK bar: every `steps` taps fill it. A full bar pays `bonusTaps` taps of money, scaled by
+// ctx.barMult (the chair class), and grants a job speed boost for `speedDur` seconds; active boosts
+// stack linearly (speed = 1 + speed × active).
 // Expiry is judged against `state.t`, so an expired boost never scales anything, and the stack
 // does not survive an absence (offline() clears it).
 //
@@ -28,7 +29,7 @@ export const bar = {
       if (b.steps < cfg.bar.steps) continue;
       b.steps = 0;
       b.bars += 1;
-      state.credits += cfg.bar.bonusTaps * tapMoney(state, cfg, ctx);
+      state.credits += cfg.bar.bonusTaps * ctx.barMult * tapMoney(state, cfg, ctx);
       b.boosts.push(state.t + cfg.bar.speedDur);
     }
     b.boosts = b.boosts.filter((until) => until > state.t);
