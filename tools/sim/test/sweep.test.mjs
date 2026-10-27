@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getPath, setPath, sweep } from '../model/sweep.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const config = load('../presets/v2-2026-10-23.json');
+const config = loadDefaultPreset();
 const profiles = { active: load('../profiles/active.json'), casual: load('../profiles/casual.json') };
 const targets = load('../targets/seven-day-idle.json');
 
@@ -43,9 +44,9 @@ test('sweep over two values yields two rows with total = targets × profiles', (
       assert.deepEqual(Object.keys(m), ['firstEvent:rig', 'rigs.count', 'credits.final', 'offersLeft.final']);
     }
   }
-  // The first row is the preset itself: 7 of 10 pass, as in the targets test.
-  assert.equal(rows[0].passes, 7);
-  assert.equal(rows[0].metrics.active['firstEvent:rig'], 56);
+  // The first row is the preset itself: 8 of 10 pass, as in the targets test (2026-10-27 baseline).
+  assert.equal(rows[0].passes, 8);
+  assert.equal(rows[0].metrics.active['firstEvent:rig'], 91.2);
   assert.notEqual(rows[1].metrics.active['credits.final'], rows[0].metrics.active['credits.final']);
   assert.equal(config.jobs.list[0].cost, 6, 'the config passed in is untouched');
 });

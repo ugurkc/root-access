@@ -6,9 +6,10 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_PRESET_PATH } from './default-preset.mjs';
 
 const CLI = fileURLToPath(new URL('../cli.mjs', import.meta.url));
-const PRESET = fileURLToPath(new URL('../presets/v2-2026-10-23.json', import.meta.url));
+const PRESET = DEFAULT_PRESET_PATH;
 const TARGETS = fileURLToPath(new URL('../targets/seven-day-idle.json', import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), 'sim-cli-'));
 test.after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -78,7 +79,7 @@ test('run --json: parseable, 7 summary rows per profile, verdicts array, no fina
   }
   assert.ok(Array.isArray(j.verdicts));
   assert.equal(j.verdicts.length, 10);
-  // The preset's baseline failures make the exit code 1.
+  // The preset's baseline failure (daily-rig-or-item, 2026-10-27 baseline) makes the exit code 1.
   assert.equal(r.code, 1);
 });
 
@@ -173,7 +174,8 @@ test('sweep: one row per value, with passes/total and per-profile first rig and 
   assert.match(rows[0], /firstEvent:rig\/active/);
   assert.match(rows[0], /offersLeft\.final\/casual/);
   assert.equal(rows.length, 3, r.out);
-  assert.match(rows[1], /^\s*6\s+7\/10\s/);
+  // The first row is the preset itself: 8/10 (2026-10-27 baseline, only daily-rig-or-item fails).
+  assert.match(rows[1], /^\s*6\s+8\/10\s/);
   assert.match(rows[2], /^\s*12\s+\d+\/10\s/);
 });
 

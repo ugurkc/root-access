@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
 import { evaluate, validateTargets } from '../model/targets.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
 
@@ -162,13 +163,13 @@ test('validateTargets accepts the starter file and rejects malformed targets wit
   assert.deepEqual(validateTargets('not a list'), [{ path: '', message: 'expected an array of targets' }]);
 });
 
-// The starter file against the v2 preset. Two targets fail as the known baseline (see
-// test/fixtures/README.md), not as tool bugs: `d7-not-done` for `active` (a greedy active player
-// buys the last upgrade on day 7, offersLeft.final is 0; casual still has offers left), and
-// `daily-rig-or-item` for both (rigs and items run out early; from day 3 (active) or day 5 (casual)
-// only item levels are bought).
-test('seven-day-idle targets against the v2 preset: all pass except the baseline failures', () => {
-  const config = load('../presets/v2-2026-10-23.json');
+// The starter file against the default preset. This is the 2026-10-27 baseline (job ladder retune:
+// no milestone, r 1.20, cap 50; see test/fixtures/README.md): one target fails, for both profiles,
+// as a known finding and not as a tool bug: `daily-rig-or-item` (rigs and items run out early; from
+// day 4 (active) or day 7 (casual) only job and item levels are bought). `d7-not-done` now passes for
+// both, since the ladder is unfinished on day 7 (active has 4 offers left, casual 9).
+test('seven-day-idle targets against the default preset: all pass except the baseline failures', () => {
+  const config = loadDefaultPreset();
   const byProfile = {
     active: run({ config, profile: load('../profiles/active.json'), days: 7 }),
     casual: run({ config, profile: load('../profiles/casual.json'), days: 7 }),
@@ -176,11 +177,10 @@ test('seven-day-idle targets against the v2 preset: all pass except the baseline
   const verdicts = evaluate(load('../targets/seven-day-idle.json'), byProfile);
   assert.equal(verdicts.length, 10);
   const failed = verdicts.filter((v) => !v.pass).map((v) => `${v.id}/${v.profile}`);
-  assert.deepEqual(failed, ['d7-not-done/active', 'daily-rig-or-item/active', 'daily-rig-or-item/casual']);
+  assert.deepEqual(failed, ['daily-rig-or-item/active', 'daily-rig-or-item/casual']);
   for (const v of verdicts) assert.equal(v.error, undefined, `${v.id}/${v.profile}: ${v.error}`);
   const byKey = Object.fromEntries(verdicts.map((v) => [`${v.id}/${v.profile}`, v.actual]));
-  assert.equal(byKey['d7-not-done/active'], 0);
-  assert.ok(byKey['d7-not-done/casual'] >= 1);
+  assert.ok(byKey['d7-not-done/active'] >= 1 && byKey['d7-not-done/casual'] >= 1);
   assert.ok(byKey['first-rig/active'] <= 480 && byKey['first-rig/casual'] <= 480);
   assert.ok(byKey['daily-purchase/active'] >= 1 && byKey['daily-purchase/casual'] >= 1);
 });

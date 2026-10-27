@@ -1,7 +1,8 @@
 # Pacing fixture
 
-`v2-expected.json` locks the behaviour of the full default module set against the v2 preset
-(`presets/v2-2026-10-23.json`) for both profiles over 7 days. `test/pacing.test.mjs` checks it in
+`v2-expected.json` locks the behaviour of the full default module set against the default preset
+(the first entry in `ui/manifest.json`, currently `presets/v2-2026-10-27.json`; the tests read it
+through `test/default-preset.mjs`) for both profiles over 7 days. `test/pacing.test.mjs` checks it in
 two layers.
 
 ## Layer 1: coarse facts
@@ -27,15 +28,26 @@ rewrites the fixture from the current run (the test passes in that mode, so look
 committing). A fixture change must be deliberate: commit it alongside the preset or model change that
 caused it and say why in the message. Never regenerate just to make the test green.
 
-## Current baseline (2026-10-23)
+## Current baseline (2026-10-27)
 
-- Active: rack at 50 s, Wi-Fi rig at 56 s, first item at 93 s of day 1; all five rigs and every
-  job maxed by day 3, only item levels left from day 4; the last upgrade (`itemlv:fiber`) falls on day 7, so
-  `offersLeft.final` is 0 and `purchasesPerDay` is `[100, 124, 49, 5, 2, 1, 1]`. The room is
-  full (2 racks, GPU in the large slots) from day 1. This day-7 dead end is a known finding of the
-  current preset, recorded here as the baseline rather than fixed.
-- Casual: Wi-Fi rig at 89 s of day 1, one rig a day through day 4, `offersLeft.final` is 2 and
-  `purchasesPerDay` is `[72, 65, 48, 26, 47, 9, 5]`.
-- Both: the starter target `daily-rig-or-item` (a rig or item placed on each of days 2–6) fails.
-  Rigs and items run out early; only item levels are bought from day 3 (active) or day 5 (casual).
-  Recorded as a baseline finding of the preset, like the active day-7 dead end above.
+Preset `v2-2026-10-27.json`: the job ladder retune (no level-25 milestone, cost growth `r` 1.20 on
+every job, level cap 50). Purchases now spread across the week instead of running dry on day 3.
+
+- Active: rack at 81 s, Wi-Fi rig at 91 s, first item (`item:lamp`) at 180 s of day 1; all five
+  reachable rigs by day 3 (wifi, ceo on day 1; dms, bank on day 2; cams on day 3), the room full
+  (2 racks, GPU in the large slots) from day 2. The ladder is unfinished on day 7: wifi, ceo, dms
+  and bank at level 50, cams at 44, sat at 34; `offersLeft.final` is 4 and `purchasesPerDay` is
+  `[98, 156, 79, 36, 17, 10, 6]`. Passive income reaches about $194K/s on day 7.
+- Casual: Wi-Fi rig at 146 s of day 1, one rig a day through day 4 and the fifth on day 6;
+  `offersLeft.final` is 9 and `purchasesPerDay` is `[59, 40, 57, 41, 53, 12, 40]`.
+- Both: `d7-not-done` now passes. The starter target `daily-rig-or-item` (a rig or item placed
+  on each of days 2–6) still fails for both: rigs and items run out early, and from day 4 (active)
+  or day 7 (casual) only job and item levels are bought. Recorded as a baseline finding of the
+  preset, not fixed.
+
+## Previous baseline (2026-10-23)
+
+Preset `v2-2026-10-23.json` (milestone at 25, `r` 1.12–1.13, cap 25): active bought the last
+upgrade on day 7 (`offersLeft.final` 0, `purchasesPerDay` `[100, 124, 49, 5, 2, 1, 1]`), casual
+ended with 2 offers left (`[72, 65, 48, 26, 47, 9, 5]`); `d7-not-done` (active) and
+`daily-rig-or-item` (both) failed, 7/10. Kept in git history, not in the fixture.

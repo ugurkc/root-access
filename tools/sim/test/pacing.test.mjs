@@ -1,4 +1,5 @@
-// Pacing fixture: the full default module set against the v2 preset, both profiles, 7 days.
+// Pacing fixture: the full default module set against the default preset (manifest.presets[0]),
+// both profiles, 7 days.
 // Two layers (see fixtures/README.md):
 //   1. coarse facts asserted here, measured from the model and expected to survive tuning;
 //   2. an exact fixture (fixtures/v2-expected.json) so any drift in the per-day purchase lists or
@@ -7,10 +8,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { run } from '../model/core.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
 const DAYS = 7;
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const config = load('../presets/v2-2026-10-23.json');
+const config = loadDefaultPreset();
 const profiles = { active: load('../profiles/active.json'), casual: load('../profiles/casual.json') };
 const runs = Object.fromEntries(Object.entries(profiles).map(([id, profile]) => [id, run({ config, profile, days: DAYS })]));
 

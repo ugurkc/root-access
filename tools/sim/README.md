@@ -188,15 +188,21 @@ node tools/sim/cli.mjs run --config tools/sim/presets/2026-11-05.json --targets 
 
 Commit the new preset named by date and keep the old one; presets are history. If the decision changed
 what "good pacing" means, update or add a targets file in the same commit so the verdicts describe the
-intent, not the old one. The pacing fixture stays locked to `v2-2026-10-23.json` unless you move it.
+intent, not the old one. The pacing fixture and the integration tests follow the default preset, the first entry in
+`ui/manifest.json` (read through `test/default-preset.mjs`), so moving the default is one manifest edit
+followed by `UPDATE_FIXTURE=1 npm test`.
 
-## Baseline findings on `v2-2026-10-23.json`
+## Baseline findings on `v2-2026-10-27.json`
 
-A greedy active player fills the three large slots with two racks and the GPU tower on day 1, has all
-five reachable rigs and all six jobs at level 25 by day 3, and buys the last upgrade (`itemlv:fiber`)
-on day 7: `offersLeft.final` is 0 and `purchasesPerDay` is `[100, 124, 49, 5, 2, 1, 1]`. The server,
-cooler, quantum card, cat, girlfriend and the satellite rig can never be bought. Casual ends day 7 with
-two offers left and `purchasesPerDay` `[72, 65, 48, 26, 47, 9, 5]`. First job level-up at 3.2 s and 4 s, first rig at 56 s
-and 89 s; active passive income plateaus around $240K/s from day 4. The starter targets `d7-not-done`
-(active) and `daily-rig-or-item` (both) fail, so `run` with them exits 1 at 7/10. These are facts about
-the preset, not tool bugs; the fixture records them deliberately (`test/fixtures/README.md`).
+The job ladder retune (no level-25 milestone, cost growth `r` 1.20 on every job, level cap 50) spreads
+purchases across the week. A greedy active player places a rack at 81 s, the Wi-Fi rig at 91 s and the
+first item at 180 s of day 1, owns all five reachable rigs by day 3 and keeps levelling jobs through
+day 7 (wifi, ceo, dms, bank at 50; cams 44, sat 34): `offersLeft.final` is 4 and `purchasesPerDay` is
+`[98, 156, 79, 36, 17, 10, 6]`. The server, cooler, quantum card, cat, girlfriend and the satellite rig
+still can never be bought. Casual gets the Wi-Fi rig at 146 s, one rig a day through day 4 and the
+fifth on day 6, and ends day 7 with nine offers left and `purchasesPerDay` `[59, 40, 57, 41, 53, 12, 40]`.
+First job level-up at 3.2 s and 4 s; active passive income reaches about $194K/s on day 7. `d7-not-done`
+now passes for both; only the starter target `daily-rig-or-item` fails (both profiles), so `run` with
+them exits 1 at 8/10. That is a fact about the preset, not a tool bug; the fixture records it
+deliberately (`test/fixtures/README.md`). The previous preset, `v2-2026-10-23.json`, finished the
+ladder on day 7 for active (`offersLeft.final` 0, 7/10 pass); it stays in `presets/` as history.
