@@ -4,7 +4,7 @@ import { defaultModules } from './registry.mjs';
 
 export const VERSION = '0.1.0';
 
-// `class` is a room class's first tier, `tier` a later one.
+// `class` is a class's first tier, `tier` a later one.
 const BIG_KINDS = new Set(['rig', 'class', 'tier']);
 const MAX_BUYS_PER_SHOP = 300;
 
@@ -115,14 +115,15 @@ const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult', 'rigSpeedMult', 'tapMu
 
 // Multipliers of all modules multiplied together (default 1), plus tick bookkeeping, the policy,
 // the session's taps per second (`tps`, 0 while offline and in the final metrics ctx) and
-// `record(event)`, which adds a timeline event stamped with the current t and day so a module
-// only passes `{ kind, id, ... }` (the core records purchases itself; this is for the rest).
+// `record(event)`, which adds a timeline event stamped with the current t and day (the stamp overwrites
+// any t or day in the event) so a module only passes `{ kind, id, ... }`; the core records purchases
+// itself, this is for the rest.
 // A non-finite multiplier would silently poison every number downstream, so it is an error here.
 function buildCtx(state, mods, profile, tapsThisTick, tps, record) {
   const ctx = {
     ...Object.fromEntries(MULT_KEYS.map((k) => [k, 1])),
     tapsThisTick, t: state.t, policy: profile.policy, tps,
-    record: (event) => record({ t: state.t, day: state.day, ...event }),
+    record: (event) => record({ ...event, t: state.t, day: state.day }),
   };
   for (const m of mods) {
     if (!m.multipliers) continue;

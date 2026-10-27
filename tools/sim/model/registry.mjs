@@ -27,7 +27,7 @@
 //   'income.passive'  credits per second earned without tapping
 //   'income.tap'      credits per tap; the core multiplies by the session's taps per second
 //
-// Purchase kinds: 'level', 'class' (a room class's first tier), 'tier' (a later one), 'rig'.
+// Purchase kinds: 'level', 'class' (a class's first tier), 'tier' (a later one), 'rig'.
 // Offer kinds the core treats specially:
 //   'rig'                  bought in a pre-pass whenever affordable (policy.buyRigsWhenAffordable)
 //   'rig', 'class', 'tier' "big": the shop saves for one that is reachable within the save window
@@ -41,11 +41,15 @@
 //     tps,                              taps per second of the current session; 0 while offline and in
 //                                       the final metrics ctx
 //     policy,                           the profile's buying policy
-//     record(event) }                   adds a timeline event, stamped with the current t and day. Give it
-//                                       a numeric `cost` only for a purchase: the core records purchases
-//                                       itself, so modules use it for non-purchase events such as loot drops
+//     record(event) }                   adds a timeline event, stamped with the current t and day (`t` and `day`
+//                                       in the passed event are overwritten by the core's stamp). Inside offline()
+//                                       the stamp's `t` is the gap's start (the end of the previous session) while
+//                                       `day` is the day of the session that follows the gap. Give it a numeric
+//                                       `cost` only for a purchase: the core records purchases itself, so modules
+//                                       use it for non-purchase events such as loot drops
 //
-// Order: taps, bar, jobs, rigs, room, classes, events, loot, offline.
+// Order: taps, bar, jobs, rigs, classes, events, loot, offline (classes and loot land in Tasks 3–6; until
+// then defaultModules() below still lists racks and items).
 // bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
 // loot must follow jobs: it rolls on the job runs that completed this tick.
 import { taps } from './mods/taps.mjs';

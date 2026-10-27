@@ -210,3 +210,29 @@ test('purchasesByKindPerDay counts purchases only, not recorded non-purchase eve
   assert.deepEqual(r.summary[0].purchases, ['m:lv']);
   assert.deepEqual(r.metrics.purchasesPerDay, [1]);
 });
+
+test('a non-finite value for one of the new multiplier keys names the module and the key', () => {
+  const mod = { id: 'router', init: () => {}, tick: () => {}, offers: () => [], buy: () => {}, metrics: () => ({}),
+    multipliers: () => ({ tapAdvanceMult: Infinity }) };
+  assert.throws(() => run({ config: minimalConfig(), profile: oneSession({ tps: 1, minutes: 1 }), days: 1, modules: [mod] }),
+    /router.*tapAdvanceMult/);
+});
+
+test('the final metrics ctx has tps 0', () => {
+  let seen;
+  const mod = { id: 'x', init: () => {}, tick: () => {}, offers: () => [], buy: () => {},
+    metrics: (s, ctx) => { seen = ctx; return {}; } };
+  run({ config: minimalConfig(), profile: oneSession({ tps: 2.5, minutes: 1 }), days: 1, modules: [mod] });
+  assert.equal(seen.tps, 0);
+});
+
+test("ctx.record stamps the core's t and day over any the module passes", () => {
+  const m = { id: 'm', init: (s) => { s.m = { done: false }; },
+    tick: (s, dt, ctx) => { if (!s.m.done && ctx.t >= 10) { s.m.done = true; ctx.record({ kind: 'x', id: 'x', t: 0, day: 9 }); } },
+    offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const profile = oneSession({ tps: 1, minutes: 1, later: [{ hour: 8, minutes: 1, tps: 1 }] });
+  const r = run({ config: minimalConfig(), profile, days: 2, modules: [m] });
+  const ev = r.timeline.find((e) => e.kind === 'x');
+  assert.equal(ev.t, 10);
+  assert.equal(ev.day, 1);
+});
