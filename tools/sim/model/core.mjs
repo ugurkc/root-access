@@ -4,7 +4,8 @@ import { defaultModules } from './registry.mjs';
 
 export const VERSION = '0.1.0';
 
-const BIG_KINDS = new Set(['rig', 'item', 'rack']);
+// `class` is a room class's first tier, `tier` a later one.
+const BIG_KINDS = new Set(['rig', 'class', 'tier']);
 const MAX_BUYS_PER_SHOP = 300;
 
 // Day 1 plays `sessions.day1`; every later day plays each entry of `sessions.later`, sorted by hour.
@@ -32,6 +33,8 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   }));
   let activeSeconds = 0;
   const shopStats = { capHits: 0 };
+  // Every timeline event has t, day and kind; a purchase also has a numeric cost. The first time
+  // each kind (other than offline) appears is a metric, so a module-recorded kind gets one too.
   const record = (event) => {
     timeline.push(event);
     if (event.kind !== 'offline' && !(event.kind in firstEvent)) firstEvent[event.kind] = activeSeconds;
@@ -40,19 +43,19 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   let prevEnd = null;
   for (const session of sessionsFor(profile, days)) {
     const row = summary[session.day - 1];
+    // A gap belongs to the day of the session it precedes, so events recorded during it do too.
+    state.day = session.day;
     if (prevEnd !== null && session.start > prevEnd) {
       const gap = session.start - prevEnd;
       const before = state.credits;
       // Modules see the gap in registry order, each with multipliers rebuilt after the previous one,
       // so a module that resets state on absence must precede one that prices the gap.
-      for (const m of mods) if (m.offline) m.offline(state, gap, buildCtx(state, mods, profile, 0));
+      for (const m of mods) if (m.offline) m.offline(state, gap, buildCtx(state, mods, profile, 0, 0, record));
       state.t += gap;
-      state.day = session.day;
       const earned = state.credits - before;
       row.offlineEarned += earned;
       record({ t: state.t, day: session.day, kind: 'offline', seconds: gap, earned });
     }
-    state.day = session.day;
 
     // Integer tick count and time derived from the tick index, so neither the count nor t drifts.
     const dt = 1 / session.tps;
@@ -62,7 +65,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     const sessionStartActive = activeSeconds;
     let lastShopSecond = 0;
     for (let i = 1; i <= ticks; i++) {
-      const ctx = buildCtx(state, mods, profile, 1);
+      const ctx = buildCtx(state, mods, profile, 1, session.tps, record);
       const before = state.credits;
       for (const m of mods) m.tick(state, dt, ctx);
       row.activeEarned += state.credits - before;
@@ -77,7 +80,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
     prevEnd = session.start + total;
     row.activeMinutes += session.minutes;
     row.credits = state.credits;
-    row.incomePassive = passiveIncome(state, mods, buildCtx(state, mods, profile, 0));
+    row.incomePassive = passiveIncome(state, mods, buildCtx(state, mods, profile, 0, 0, record));
   }
 
   // Days without a session keep the previous day's closing balance and income.
@@ -87,14 +90,15 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
       summary[i].incomePassive = summary[i - 1].incomePassive;
     }
   }
+  // Purchases are the events with a cost; module-recorded events (loot drops) have none.
   const byKind = {};
   for (const e of timeline) {
-    if (e.kind === 'offline') continue;
+    if (typeof e.cost !== 'number') continue;
     summary[e.day - 1].purchases.push(e.id);
     (byKind[e.kind] ??= new Array(days).fill(0))[e.day - 1]++;
   }
 
-  const finalCtx = buildCtx(state, mods, profile, 0);
+  const finalCtx = buildCtx(state, mods, profile, 0, 0, record);
   const metrics = {};
   for (const m of mods) Object.assign(metrics, m.metrics(state, finalCtx));
   for (const [kind, seconds] of Object.entries(firstEvent)) metrics[`firstEvent:${kind}`] = seconds;
@@ -107,12 +111,19 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   return { summary, timeline, metrics, final: { credits: state.credits, state } };
 }
 
-const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult'];
+const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult', 'rigSpeedMult', 'tapMult', 'barMult', 'tapAdvanceMult'];
 
-// Multipliers of all modules multiplied together (default 1), plus tick bookkeeping and the policy.
+// Multipliers of all modules multiplied together (default 1), plus tick bookkeeping, the policy,
+// the session's taps per second (`tps`, 0 while offline and in the final metrics ctx) and
+// `record(event)`, which adds a timeline event stamped with the current t and day so a module
+// only passes `{ kind, id, ... }` (the core records purchases itself; this is for the rest).
 // A non-finite multiplier would silently poison every number downstream, so it is an error here.
-function buildCtx(state, mods, profile, tapsThisTick) {
-  const ctx = { payMult: 1, speedMult: 1, comfortMult: 1, tapsThisTick, t: state.t, policy: profile.policy };
+function buildCtx(state, mods, profile, tapsThisTick, tps, record) {
+  const ctx = {
+    ...Object.fromEntries(MULT_KEYS.map((k) => [k, 1])),
+    tapsThisTick, t: state.t, policy: profile.policy, tps,
+    record: (event) => record({ t: state.t, day: state.day, ...event }),
+  };
   for (const m of mods) {
     if (!m.multipliers) continue;
     const k = m.multipliers(state) ?? {};

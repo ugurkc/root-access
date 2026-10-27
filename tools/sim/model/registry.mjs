@@ -14,8 +14,9 @@
 //   metrics(state, ctx)         → { 'name': number }; merged into the run's metrics. `ctx` is the current
 //                               multipliers at the call site (the core always passes one; a caller with
 //                               none in hand passes a neutral ctx of all 1s)
-//   multipliers?(state)         → partial { payMult, speedMult, comfortMult }; missing keys default to 1,
-//                               every value must be finite (the core throws otherwise)
+//   multipliers?(state)         → partial { payMult, speedMult, comfortMult, rigSpeedMult, tapMult, barMult,
+//                               tapAdvanceMult }; missing keys default to 1, every value must be finite
+//                               (the core throws otherwise)
 //
 // State: the core sets `state.config` once in run(); module methods read config from there and
 // never stash it in their own slice. A module's slice layout is private: other modules go through
@@ -26,19 +27,27 @@
 //   'income.passive'  credits per second earned without tapping
 //   'income.tap'      credits per tap; the core multiplies by the session's taps per second
 //
+// Purchase kinds: 'level', 'class' (a room class's first tier), 'tier' (a later one), 'rig'.
 // Offer kinds the core treats specially:
 //   'rig'                  bought in a pre-pass whenever affordable (policy.buyRigsWhenAffordable)
-//   'rig', 'item', 'rack'  "big": the shop saves for one that is reachable within the save window
+//   'rig', 'class', 'tier' "big": the shop saves for one that is reachable within the save window
 //                          and beats the best affordable offer by policy.bigValueRatio
 //
 // ctx, rebuilt each tick, and per module in the gap loop:
-//   { payMult, speedMult, comfortMult,  product of every module's multipliers()
+//   { payMult, speedMult, comfortMult, rigSpeedMult, tapMult, barMult, tapAdvanceMult,
+//                                       product of every module's multipliers()
 //     tapsThisTick,                     1 per tick while in a session, 0 offline
 //     t,                                simulated seconds since the first session began (gaps included)
-//     policy }                          the profile's buying policy
+//     tps,                              taps per second of the current session; 0 while offline and in
+//                                       the final metrics ctx
+//     policy,                           the profile's buying policy
+//     record(event) }                   adds a timeline event, stamped with the current t and day. Give it
+//                                       a numeric `cost` only for a purchase: the core records purchases
+//                                       itself, so modules use it for non-purchase events such as loot drops
 //
-// Order: taps, bar, jobs, rigs, racks, items, events, offline.
+// Order: taps, bar, jobs, rigs, room, classes, events, loot, offline.
 // bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
+// loot must follow jobs: it rolls on the job runs that completed this tick.
 import { taps } from './mods/taps.mjs';
 import { bar } from './mods/bar.mjs';
 import { jobs } from './mods/jobs.mjs';

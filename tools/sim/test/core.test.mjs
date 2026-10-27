@@ -153,3 +153,60 @@ test('a non-finite multiplier is a clear error, not a silent NaN run', () => {
     multipliers: () => ({ speedMult: NaN }) };
   assert.throws(() => run({ config: cfg, profile: active, days: 1, modules: [mod] }), /bad.*speedMult/);
 });
+
+// Schema-2 helpers for the starter home tests: a bare config (stubs need no blocks) and a profile
+// whose only session is day 1 at 20:00; `later` adds the sessions every following day plays.
+const minimalConfig = () => ({ schema: 2 });
+const policy = { saveForBigWithinMinutes: 30, bigValueRatio: 1.5, buyRigsWhenAffordable: true, restartManualJobs: true };
+const oneSession = ({ tps, minutes, later = [] }) => ({ sessions: { day1: { hour: 20, minutes, tps }, later }, policy });
+
+test('ctx carries the four new multipliers, defaulting to 1, and the session tps', () => {
+  let seen;
+  const probe = { id: 'probe', init: (s) => { s.probe = {}; }, tick: (s, dt, ctx) => { seen = ctx; },
+    offers: () => [], buy: () => {}, metrics: () => ({}),
+    multipliers: () => ({ tapMult: 2, barMult: 3 }) };
+  run({ config: minimalConfig(), profile: oneSession({ tps: 2.5, minutes: 1 }), days: 1, modules: [probe] });
+  assert.equal(seen.tapMult, 2);
+  assert.equal(seen.barMult, 3);
+  assert.equal(seen.rigSpeedMult, 1);
+  assert.equal(seen.tapAdvanceMult, 1);
+  assert.equal(seen.tps, 2.5);
+});
+
+test('ctx.record adds a timeline event that is not a purchase but does set firstEvent', () => {
+  const m = { id: 'm', init: (s) => { s.m = { done: false }; },
+    tick: (s, dt, ctx) => { if (!s.m.done) { s.m.done = true; ctx.record({ kind: 'loot', id: 'loot:wifi', earned: 5 }); } },
+    offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const r = run({ config: minimalConfig(), profile: oneSession({ tps: 1, minutes: 1 }), days: 1, modules: [m] });
+  const ev = r.timeline.find((e) => e.kind === 'loot');
+  assert.equal(ev.day, 1);
+  assert.equal(ev.earned, 5);
+  assert.deepEqual(r.summary[0].purchases, []);
+  assert.deepEqual(r.metrics.purchasesPerDay, [0]);
+  assert.equal(r.metrics['firstEvent:loot'], 0);
+});
+
+test('offline receives ctx.tps 0 and a working ctx.record; the event lands on the day of the next session', () => {
+  let seen;
+  const m = { id: 'm', init: () => {}, tick: () => {},
+    offline: (s, secs, ctx) => { seen = ctx; ctx.record({ kind: 'drip', id: 'drip:1' }); },
+    offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const profile = oneSession({ tps: 2, minutes: 1, later: [{ hour: 8, minutes: 1, tps: 2 }] });
+  const r = run({ config: minimalConfig(), profile, days: 2, modules: [m] });
+  assert.equal(seen.tps, 0);
+  const ev = r.timeline.find((e) => e.kind === 'drip');
+  assert.equal(ev.day, 2);
+  assert.equal(ev.t, 60);                          // recorded before the core advances t past the gap
+  assert.equal(r.metrics['firstEvent:drip'], 60);
+});
+
+test('purchasesByKindPerDay counts purchases only, not recorded non-purchase events', () => {
+  const m = { id: 'm', init: (s) => { s.m = { lv: 0, dropped: false }; },
+    tick: (s, dt, ctx) => { s.credits += 10 * dt; if (!s.m.dropped) { s.m.dropped = true; ctx.record({ kind: 'loot', id: 'loot:x', earned: 1 }); } },
+    offers: (s) => (s.m.lv < 1 ? [{ id: 'm:lv', cost: 5, gainPerSec: 1, kind: 'level' }] : []),
+    buy: (s) => { s.m.lv = 1; }, metrics: () => ({}) };
+  const r = run({ config: minimalConfig(), profile: oneSession({ tps: 1, minutes: 1 }), days: 1, modules: [m] });
+  assert.deepEqual(r.metrics.purchasesByKindPerDay, { level: [1] });
+  assert.deepEqual(r.summary[0].purchases, ['m:lv']);
+  assert.deepEqual(r.metrics.purchasesPerDay, [1]);
+});
