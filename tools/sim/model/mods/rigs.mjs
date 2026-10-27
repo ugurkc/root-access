@@ -1,14 +1,18 @@
 // Rigs: one per job, bought once, automate the job (it loops by itself and runs while away).
-// A rig is small hardware and needs a free shelf (see racks.mjs). It goes through jobs.mjs's
+// A rig needs a free rig slot; the rack class provides them (classes.mjs `rigSlots`). A slot holds
+// nothing but a rig, so free slots are rigSlots − rigs bought. The module goes through jobs.mjs's
 // `levelOf` / `isRigged` / `setRigged` / `runRate` and never reads `state.jobs` itself.
 import { levelOf, isRigged, setRigged, runRate } from './jobs.mjs';
-import { freeSmall, takeSmall } from './racks.mjs';
+import { rigSlots } from './classes.mjs';
 
 const OFFER_PREFIX = 'rig:';
 const offerIdFor = (jobId) => `${OFFER_PREFIX}${jobId}`;
 const jobIdOf = (offerId) => offerId.slice(OFFER_PREFIX.length);
 
 const rigFor = (cfg, jobId) => cfg.rigs.list.find((r) => r.job === jobId);
+
+// 0 when the classes block is off (rigSlots is 0 then and no rig can be bought).
+const freeRigSlot = (state) => rigSlots(state) - state.rigs.count;
 
 export const rigs = {
   id: 'rigs',
@@ -19,11 +23,11 @@ export const rigs = {
 
   tick() {},
 
-  // Offered while the job is unlocked (level ≥ 1), not yet rigged and a shelf is free.
+  // Offered while the job is unlocked (level ≥ 1), not yet rigged and a rig slot is free.
   // gainPerSec is what the job earns continuously once automated: its run rate.
   offers(state, ctx) {
     const cfg = state.config;
-    if (!state.jobs || freeSmall(state, cfg) <= 0) return [];
+    if (!state.jobs || freeRigSlot(state) <= 0) return [];
     const out = [];
     for (const rig of cfg.rigs.list) {
       if (levelOf(state, rig.job) < 1 || isRigged(state, rig.job)) continue;
@@ -32,16 +36,16 @@ export const rigs = {
     return out;
   },
 
-  // takeSmall throws when no shelf is free, before the job is marked.
+  // Throws when no slot is free, before the job is marked.
   buy(state, offerId) {
     const cfg = state.config;
     const jobId = jobIdOf(offerId);
-    takeSmall(state, cfg, offerId);
+    if (freeRigSlot(state) <= 0) throw new Error(`no free rig slot for ${offerId}`);
     setRigged(state, jobId, rigFor(cfg, jobId).name);
     state.rigs.count += 1;
   },
 
   metrics(state) {
-    return { 'rigs.count': state.rigs.count };
+    return { 'rigs.count': state.rigs.count, 'slots.rigFree': freeRigSlot(state) };
   },
 };
