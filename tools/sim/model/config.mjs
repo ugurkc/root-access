@@ -4,6 +4,8 @@
 // `atLeast(n)` is a finite number ≥ n: multipliers (≥ 1) and amounts that may be zero but not negative.
 // `nonNegInt` is an integer ≥ 0: slot counts.
 // `prob` is a finite number in [0, 1]: chances rolled per run.
+// Blocks: schema, taps, bar, jobs, rigs, classes, events, loot, offline. Rig slots come from a class
+// with effect `rigSlots` (a purchasable rack), whose tier values are slot counts.
 
 export const SCHEMA = 2;
 
@@ -31,11 +33,10 @@ export const SHAPES = {
     )),
   }),
   rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) }),
-  room: record({ enabled: bool, rigSlots: nonNegInt }),
   classes: record({
     enabled: bool,
     list: list(record(
-      { id: str, name: str, effect: enumOf(['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'none']),
+      { id: str, name: str, effect: enumOf(['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'rigSlots', 'none']),
         tiers: list(record({ name: str, cost: pos, value: atLeast(1), comfort: atLeast(0) })) },
       { event: record({ boost: atLeast(0), dur: atLeast(0) }) },
     )),
@@ -151,6 +152,20 @@ function checkClassTiers(cfg, errs) {
   });
 }
 
+// A `rigSlots` class adds its tier value to the room's rig slots, so the value must be a whole count.
+// Guarded per entry: anything that is not a record / array / number is already a shape error.
+function checkRigSlotTiers(cfg, errs) {
+  if (!Array.isArray(cfg.classes?.list)) return;
+  cfg.classes.list.forEach((cls, i) => {
+    if (!isRecord(cls) || cls.effect !== 'rigSlots' || !Array.isArray(cls.tiers)) return;
+    cls.tiers.forEach((t, j) => {
+      if (isRecord(t) && typeof t.value === 'number' && !(Number.isInteger(t.value) && t.value >= 0)) {
+        errs.push({ path: `classes.list[${i}].tiers[${j}].value`, message: 'rig slot count must be an integer' });
+      }
+    });
+  });
+}
+
 export function validateConfig(cfg) {
   const errs = [];
   check(cfg, record(SHAPES), '', errs);
@@ -161,5 +176,6 @@ export function validateConfig(cfg) {
   checkRigJobs(cfg, errs);
   checkEventsInterval(cfg, errs);
   checkClassTiers(cfg, errs);
+  checkRigSlotTiers(cfg, errs);
   return errs;
 }

@@ -1,5 +1,5 @@
 // Shared schema-2 fixture for the starter home tests: a small complete config and a neutral ctx.
-// `base()` validates clean; tests mutate a copy. Later tasks (room, classes, jobs, loot) reuse it.
+// `base()` validates clean; tests mutate a copy. Later tasks (rigs, classes, jobs, loot) reuse it.
 
 export const tier = (over = {}) => ({ name: 'Simple desk', cost: 30, value: 1.25, comfort: 2, ...over });
 
@@ -17,10 +17,10 @@ export const base = () => ({
     ],
   },
   rigs: { enabled: true, list: [{ job: 'wifi', name: 'Script', cost: 120 }, { job: 'stream', name: 'Bot', cost: 600 }] },
-  room: { enabled: true, rigSlots: 3 },
   classes: {
     enabled: true,
     list: [
+      { id: 'rack', name: 'Rack', effect: 'rigSlots', tiers: [{ name: 'Server rack', cost: 60, value: 3, comfort: 0 }] },
       { id: 'computer', name: 'Computer', effect: 'pay', tiers: tiers([
         ['Old laptop', 80, 1.15, 0], ['Used desktop', 350, 1.35, 0], ['Gaming PC', 1400, 1.65, 0], ['Workstation', 4500, 2.0, 0],
       ]) },

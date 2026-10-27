@@ -6,13 +6,14 @@ import { base, tier } from './fixtures/starter-base.mjs';
 const idx = (id) => base().classes.list.findIndex((c) => c.id === id);
 const DESK = idx('desk');
 const CAT = idx('cat');
+const RACK = idx('rack');
 
 const broken = (mutate) => { const bad = base(); mutate(bad); return validateConfig(bad); };
 const reportsAt = (errs, path) => assert.ok(errs.some((e) => e.path === path), JSON.stringify(errs));
 
 test('schema is 2 and the blocks are the starter home set', () => {
   assert.equal(SCHEMA, 2);
-  assert.deepEqual(Object.keys(SHAPES), ['schema', 'taps', 'bar', 'jobs', 'rigs', 'room', 'classes', 'events', 'loot', 'offline']);
+  assert.deepEqual(Object.keys(SHAPES), ['schema', 'taps', 'bar', 'jobs', 'rigs', 'classes', 'events', 'loot', 'offline']);
   assert.deepEqual(validateConfig(base()), []);
 });
 
@@ -116,10 +117,15 @@ test('job loot is optional; loot payRuns may be zero but not negative', () => {
   reportsAt(broken((c) => { c.loot.payRuns = -1; }), 'loot.payRuns');
 });
 
-test('room rig slots are a non-negative integer', () => {
-  reportsAt(broken((c) => { c.room.rigSlots = -1; }), 'room.rigSlots');
-  reportsAt(broken((c) => { c.room.rigSlots = 1.5; }), 'room.rigSlots');
-  assert.deepEqual(broken((c) => { c.room.rigSlots = 0; }), []);
+test('a rigSlots class is accepted and its tier values are whole slot counts', () => {
+  assert.equal(base().classes.list[RACK].effect, 'rigSlots');
+  assert.deepEqual(broken((c) => { c.classes.list[RACK].tiers[0].value = 3; }), []);
+  assert.deepEqual(broken((c) => { c.classes.list[RACK].tiers[0].value = 2.5; }),
+    [{ path: `classes.list[${RACK}].tiers[0].value`, message: 'rig slot count must be an integer' }]);
+  // A rack tier that adds no slot is caught by the tier value floor (≥ 1), once, not twice.
+  assert.deepEqual(broken((c) => { c.classes.list[RACK].tiers[0].value = 0; }).map((e) => e.path), [`classes.list[${RACK}].tiers[0].value`]);
+  // Other effects keep fractional multipliers.
+  assert.deepEqual(broken((c) => { c.classes.list[DESK].tiers[0].value = 2.5; }), []);
 });
 
 test('a missing block is exactly one missing-key error', () => {
