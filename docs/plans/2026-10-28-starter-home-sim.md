@@ -4,7 +4,7 @@
 
 **Goal:** Teach the balance simulator the starter home design (item classes with tiers, a three-rig shelf, passive comfort, realistic job names, random loot drops) so the starter home numbers can be tuned against the journey targets before the game is changed.
 
-**Architecture:** Config schema 2 replaces the `items` and `racks` blocks with `classes` and `room`, adds a `loot` block, and lets each job carry loot texts. In the sim, a `classes` module replaces `items.mjs`, a `room` module replaces `racks.mjs`, and a new `loot` module turns completed runs into deterministic expected loot. Four new context multipliers (`rigSpeedMult`, `tapMult`, `barMult`, `tapAdvanceMult`) carry the per-class effects to the taps, bar and jobs modules. The game is not touched by this plan; a follow-on plan ports the game to schema 2 once the numbers are chosen.
+**Architecture:** Config schema 2 replaces the `items` and `racks` blocks with `classes`, adds a `loot` block, and lets each job carry loot texts. In the sim, a `classes` module replaces `items.mjs` and `racks.mjs` (a rack is a class whose effect is rig slots), and a new `loot` module turns completed runs into deterministic expected loot. Four new context multipliers (`rigSpeedMult`, `tapMult`, `barMult`, `tapAdvanceMult`) carry the per-class effects to the taps, bar and jobs modules. The game is not touched by this plan; a follow-on plan ports the game to schema 2 once the numbers are chosen.
 
 **Tech Stack:** Plain ES modules, Node 22, Node's test runner (`npm test` from `tools/sim`), no dependencies. Design: `docs/plans/2026-10-28-starter-home-classes-design.md`. Sim contract: `tools/sim/README.md`, `tools/sim/model/registry.mjs`.
 
@@ -23,9 +23,10 @@
              "list": [ { "id": "wifi", "name": "…", "time": 6, "pay": 2, "cost": 5, "r": 1.2, "rep": 3, "unlock": 0,
                          "loot": ["Neighbor's Netflix login", "…"] } ] },
   "rigs":  { "enabled": true, "list": [ { "job": "wifi", "name": "Wi-Fi cracking script", "cost": 120 } ] },
-  "room":  { "enabled": true, "rigSlots": 3 },
   "classes": { "enabled": true,
-             "list": [ { "id": "desk", "name": "Desk", "effect": "tapMoney",
+             "list": [ { "id": "rack", "name": "Rack", "effect": "rigSlots",
+                         "tiers": [ { "name": "Server rack", "cost": 60, "value": 3, "comfort": 0 } ] },
+                       { "id": "desk", "name": "Desk", "effect": "tapMoney",
                          "tiers": [ { "name": "Simple desk", "cost": 30, "value": 1.25, "comfort": 2 } ] },
                        { "id": "cat", "name": "Cat", "effect": "none",
                          "tiers": [ { "name": "Cat", "cost": 300, "value": 1, "comfort": 10 } ],
@@ -37,13 +38,15 @@
 ```
 
 Rules:
-- A class owns one room spot. Tier 0 means not owned; buying moves it to the next tier. `tiers[t].value` is the multiplier the class applies at tier t+1 (≥ 1); `effect` says to what: `pay` (job pay), `tapAdvance` (seconds of job work per HACK tap), `rigSpeed` (speed of rigged jobs only), `tapMoney` (credits per tap), `barBonus` (the full-bar payout), or `none`. `comfort` is the tier's permanent comfort; `event` (optional, per class) is averaged exactly as today's decor events.
+- A class owns one room spot. Tier 0 means not owned; buying moves it to the next tier. `tiers[t].value` is the multiplier the class applies at tier t+1 (≥ 1); `effect` says to what: `pay` (job pay), `tapAdvance` (seconds of job work per HACK tap), `rigSpeed` (speed of rigged jobs only), `tapMoney` (credits per tap), `barBonus` (the full-bar payout), `rigSlots` (the tier's `value` is a count of rig slots, not a multiplier), or `none`. `comfort` is the tier's permanent comfort; `event` (optional, per class) is averaged exactly as today's decor events.
 - `comfortMult = 1 + (owned tiers' comfort + average event comfort) / 100`, applied to job pay and to taps, as today.
-- Rigs need a free rig slot (`room.rigSlots`). Six rigs exist, three fit; the shop buys the first affordable ones.
+- Rigs need a free rig slot. Only the rack class provides them: owning the Server rack gives 3. Six rigs exist, three fit; the shop buys the first affordable ones. The rack is cheap and bought before the first rig; the shop's rack offer gets a gainPerSec heuristic (1 % of passive income plus 1 credit/s) so it is bought when nothing else pays.
 - Loot: every completed run (active or offline) drops loot with probability `loot.chance`, worth `loot.payRuns` runs of that job's current pay. The sim models the expectation, not the dice: each run adds `chance × payRuns × pay` to a pending pool and `chance` to an expected drop count. Pending loot is cashed on the next active tick (tapping the card), so loot from a gap lands at the start of the next session, and a `loot` timeline event is recorded each time the expected count crosses a whole number. Loot events have no `cost` and are not purchases.
 - Offer kinds: `level` (job level), `class` (a class's first tier), `tier` (a later tier), `rig`. `class`, `tier` and `rig` are "big" offers the shop may save for.
 
 ## Task 1: Schema 2 shapes and validator
+
+> Amended 2026-10-28 after the first commit: there is no `room` block. Rig slots come from a class with `effect: "rigSlots"`. The amendment removes `room` from SHAPES, adds `rigSlots` to the effect enum, and adds a rack class to the shared fixture. Block order: `schema, taps, bar, jobs, rigs, classes, events, loot, offline`.
 
 **Files:**
 - Modify: `tools/sim/model/config.mjs`
@@ -224,136 +227,27 @@ git add tools/sim/model/core.mjs tools/sim/model/registry.mjs tools/sim/test/cor
 git commit -m "sim core: seven multipliers, ctx.tps, module-recorded non-purchase events"
 ```
 
-## Task 3: Room module replaces racks
-
-**Files:**
-- Create: `tools/sim/model/mods/room.mjs`
-- Delete: `tools/sim/model/mods/racks.mjs`
-- Modify: `tools/sim/model/mods/rigs.mjs` (imports)
-- Test: `tools/sim/test/room.test.mjs` (rewrite; the old rack tests go)
-
-**Step 1: Write the failing tests**
-
-Replace `test/room.test.mjs` with tests for the room and rigs (classes come in Task 4; delete the item tests now, they will not compile anyway). Keep the file's existing helper for a base config but update it to schema 2 (use the `base()` from Task 1's test or import a shared `test/fixtures/starter-base.mjs` you create with that object). Tests:
-
-```js
-import { room, freeRigSlot, takeRigSlot } from '../model/mods/room.mjs';
-import { rigs } from '../model/mods/rigs.mjs';
-import { jobs } from '../model/mods/jobs.mjs';
-
-test('the room has rigSlots free rig slots and nothing else to buy', () => {
-  const state = { credits: 0, config: base() };
-  room.init(state, state.config);
-  assert.equal(freeRigSlot(state, state.config), 3);
-  assert.deepEqual(room.offers(state, ctx()), []);
-  takeRigSlot(state, state.config, 'rig:wifi');
-  assert.equal(freeRigSlot(state, state.config), 2);
-  assert.deepEqual(room.metrics(state), { 'slots.rigFree': 2 });
-});
-
-test('taking a rig slot when none is free throws', () => {
-  const cfg = base(); cfg.room.rigSlots = 1;
-  const state = { credits: 0, config: cfg };
-  room.init(state, cfg);
-  takeRigSlot(state, cfg, 'rig:wifi');
-  assert.throws(() => takeRigSlot(state, cfg, 'rig:stream'), /no free rig slot/);
-});
-
-test('a rig is offered for an unlocked, unrigged job while a slot is free, and takes the slot', () => {
-  const state = { credits: 0, config: base() };
-  for (const m of [jobs, rigs, room]) m.init(state, state.config);
-  assert.deepEqual(rigs.offers(state, ctx()), []);           // wifi not unlocked
-  jobs.buy(state, 'job:wifi:lv');
-  const [offer] = rigs.offers(state, ctx());
-  assert.equal(offer.id, 'rig:wifi'); assert.equal(offer.kind, 'rig'); assert.equal(offer.cost, 120);
-  rigs.buy(state, offer.id);
-  assert.equal(freeRigSlot(state, state.config), 2);
-  assert.deepEqual(rigs.offers(state, ctx()), []);
-});
-
-test('with the room block disabled no rig is ever offered', () => {
-  const cfg = base(); cfg.room.enabled = false;
-  const state = { credits: 0, config: cfg };
-  for (const m of [jobs, rigs]) m.init(state, cfg);  // room skipped, as the core would
-  jobs.buy(state, 'job:wifi:lv');
-  assert.deepEqual(rigs.offers(state, ctx()), []);
-});
-```
-
-`ctx()` returns a neutral ctx: all seven multipliers 1, `tapsThisTick: 0`, `t: 0`, `tps: 0`, `policy: {}`, `record() {}`. Put it in the shared fixture file so Tasks 4–6 reuse it.
-
-**Step 2: Run to verify failure**
-
-Run: `node --test test/room.test.mjs`
-Expected: FAIL (`room.mjs` not found).
-
-**Step 3: Implement**
-
-`model/mods/room.mjs`:
-
-```js
-// Room: the starter home's rig shelf. `room.rigSlots` slots hold one rig each; class spots are
-// implicit (one per class, see classes.mjs). Nothing is ever removed. With the block disabled
-// (`state.room` absent) there are no rig slots, so rigs are never offered.
-//
-// The layout of `state.room` is private; rigs.mjs uses only:
-//   freeRigSlot(state, cfg)         free rig slots
-//   takeRigSlot(state, cfg, what)   occupy one, recording `what`; throws when none is free
-export function freeRigSlot(state, cfg) {
-  if (!state.room) return 0;
-  return cfg.room.rigSlots - state.room.rigs.length;
-}
-
-export function takeRigSlot(state, cfg, what) {
-  if (freeRigSlot(state, cfg) <= 0) throw new Error(`no free rig slot for ${what}`);
-  state.room.rigs.push(what);
-}
-
-export const room = {
-  id: 'room',
-  init(state) { state.room = { rigs: [] }; },
-  tick() {},
-  offers() { return []; },
-  buy() {},
-  metrics(state) { return { 'slots.rigFree': freeRigSlot(state, state.config) }; },
-};
-```
-
-`rigs.mjs`: import `freeRigSlot, takeRigSlot` from `./room.mjs` instead of `freeSmall, takeSmall` from racks; replace the two uses; update the header comment ("needs a free rig slot (see room.mjs)"). Delete `racks.mjs`.
-
-**Step 4: Run the tests**
-
-Run: `node --test test/room.test.mjs`
-Expected: PASS.
-
-**Step 5: Commit**
-
-```bash
-git add -A tools/sim/model/mods tools/sim/test/room.test.mjs tools/sim/test/fixtures/starter-base.mjs
-git commit -m "sim: room module with a rig shelf replaces racks"
-```
-
-## Task 4: Classes module replaces items
+## Task 3: Classes module replaces items and racks
 
 **Files:**
 - Create: `tools/sim/model/mods/classes.mjs`
-- Delete: `tools/sim/model/mods/items.mjs`
+- Delete: `tools/sim/model/mods/items.mjs`, `tools/sim/model/mods/racks.mjs`
 - Modify: `tools/sim/model/mods/events.mjs` (reads owned classes instead of placed items)
-- Test: `tools/sim/test/classes.test.mjs`
+- Test: `tools/sim/test/classes.test.mjs`; delete `tools/sim/test/room.test.mjs` (its rig tests move to Task 4)
 
 **Step 1: Write the failing tests**
 
-`test/classes.test.mjs`, using `base()` and `ctx()` from the fixture; give `base()` a fuller class list for these tests (desk with three tiers 30/180/700, value 1.25/1.6/2.0, comfort 2/5/10; computer `pay` 80 → 1.15; router `tapAdvance` 40 → 1.5; tower `rigSpeed` 9000 → 2; chair `barBonus` 25 → 1.5 comfort 2; cat `none` comfort 10 event 20/30; gf `none` 2500 comfort 20 event 100/15):
+`test/classes.test.mjs`, using `base()` and `ctx()` from `test/fixtures/starter-base.mjs`:
 
 ```js
-import { classes, ownedClasses, totalComfort } from '../model/mods/classes.mjs';
+import { classes, ownedClasses, totalComfort, rigSlots } from '../model/mods/classes.mjs';
 import { eventsComfort } from '../model/mods/events.mjs';
 
 test('every class is offered at its first tier; buying moves it up one tier at that tier\'s cost', () => {
   const state = { credits: 0, config: base() };
   classes.init(state, state.config);
   const offers = classes.offers(state, ctx());
-  assert.deepEqual(offers.map((o) => [o.id, o.kind, o.cost]).filter(([id]) => id === 'class:desk'), [['class:desk', 'class', 30]]);
+  assert.deepEqual(offers.filter((o) => o.id === 'class:desk').map((o) => [o.id, o.kind, o.cost]), [['class:desk', 'class', 30]]);
   assert.equal(offers.length, state.config.classes.list.length);
   classes.buy(state, 'class:desk');
   const next = classes.offers(state, ctx()).find((o) => o.id === 'class:desk');
@@ -378,6 +272,24 @@ test('multipliers route each effect to its own key and comfort to comfortMult', 
   assert.equal(m.comfortMult, 1 + 4 / 100);
 });
 
+test('the rack class provides rig slots and multiplies nothing', () => {
+  const state = { credits: 0, config: base() };
+  classes.init(state, state.config);
+  assert.equal(rigSlots(state), 0);
+  classes.buy(state, 'class:rack');
+  assert.equal(rigSlots(state), 3);
+  const m = classes.multipliers(state);
+  for (const key of ['payMult', 'tapAdvanceMult', 'rigSpeedMult', 'tapMult', 'barMult']) assert.equal(m[key], 1);
+  assert.equal(classes.metrics(state)['slots.rig'], 3);
+});
+
+test('the rack offer has a positive gain even with no job running, so an idle shop still buys it', () => {
+  const state = { credits: 0, config: base() };
+  classes.init(state, state.config);
+  const rack = classes.offers(state, ctx()).find((o) => o.id === 'class:rack');
+  assert.ok(rack.gainPerSec >= 1);
+});
+
 test('cat and girlfriend add permanent comfort plus the average of their events', () => {
   const state = { credits: 0, config: base() };
   classes.init(state, state.config);
@@ -395,9 +307,10 @@ test('gainPerSec is finite for every effect, with and without running jobs', () 
   for (const o of classes.offers(state, { ...ctx(), tps: 2.5 })) assert.ok(Number.isFinite(o.gainPerSec), o.id);
 });
 
-test('with the classes block disabled comfort is 0 and events add nothing', () => {
+test('with the classes block disabled comfort is 0, events add nothing and there are no rig slots', () => {
   const state = { credits: 0, config: base() };
   assert.equal(eventsComfort(state, state.config), 0);
+  assert.equal(rigSlots(state), 0);
 });
 ```
 
@@ -414,14 +327,18 @@ Expected: FAIL (module missing).
 // Classes: each class owns one room spot and is bought once, then upgraded through its tiers.
 // `state.classes.tier[id]` is 0 (not owned) … tiers.length. The tier in force is tiers[tier − 1]:
 // its `value` multiplies what the class's `effect` names (pay, tapAdvance, rigSpeed, tapMoney,
-// barBonus; `none` multiplies nothing) and its `comfort` adds to the room's permanent comfort.
+// barBonus), or, for `rigSlots`, is the number of rig slots the class provides; `none` does
+// nothing beyond comfort. Its `comfort` adds to the room's permanent comfort.
 // comfortMult = 1 + roomComfort / 100, roomComfort = owned tiers' comfort + the average comfort of
-// the owned classes' events (events.mjs). Ownership changes only in buy(), so the owned list and the
-// multiplier products are cached there.
+// the owned classes' events (events.mjs). Ownership changes only in buy(), so the owned list, the
+// multiplier products and the slot count are cached there.
 //
-// The layout of `state.classes` is private; events.mjs uses `ownedClasses(state)`; `totalComfort`
-// is the owned tiers' comfort alone. classes.mjs and events.mjs import each other; the cycle is safe
-// only while every cross-import is a function declaration called at run time.
+// The layout of `state.classes` is private; other modules use:
+//   ownedClasses(state)       [{ cls, tier }]          (events)
+//   totalComfort(state)       owned tiers' comfort alone
+//   rigSlots(state)           rig slots the owned rack tiers provide; 0 when the block is off (rigs)
+// classes.mjs and events.mjs import each other; the cycle is safe only while every cross-import
+// is a function declaration called at run time. Same for taps.mjs (tapMoney).
 import { runningIncome, passiveIncome } from './jobs.mjs';
 import { tapMoney } from './taps.mjs';
 import { eventsComfort, eventComfortOf } from './events.mjs';
@@ -432,42 +349,49 @@ const EFFECT_KEY = { pay: 'payMult', tapAdvance: 'tapAdvanceMult', rigSpeed: 'ri
 const tierAt = (cls, tier) => (tier === 0 ? null : cls.tiers[tier - 1]);
 const valueAt = (cls, tier) => tierAt(cls, tier)?.value ?? 1;
 const comfortAt = (cls, tier) => tierAt(cls, tier)?.comfort ?? 0;
+const slotsAt = (cls, tier) => (cls.effect === 'rigSlots' ? tierAt(cls, tier)?.value ?? 0 : 0);
 
 export function ownedClasses(state) { return state.classes.ownedList; }
 export function totalComfort(state) { return state.classes.comfort; }
+export function rigSlots(state) { return state.classes ? state.classes.rigSlots : 0; }
 export function roomComfort(state, cfg) { return totalComfort(state) + eventsComfort(state, cfg); }
 
 function refresh(state, cfg) {
   const ownedList = cfg.classes.list.filter((cls) => state.classes.tier[cls.id] > 0).map((cls) => ({ cls, tier: state.classes.tier[cls.id] }));
-  const mults = {};
-  for (const key of Object.values(EFFECT_KEY)) mults[key] = 1;
+  const mults = Object.fromEntries(Object.values(EFFECT_KEY).map((k) => [k, 1]));
   let comfort = 0;
+  let slots = 0;
   for (const { cls, tier } of ownedList) {
-    if (cls.effect !== 'none') mults[EFFECT_KEY[cls.effect]] *= valueAt(cls, tier);
+    if (cls.effect in EFFECT_KEY) mults[EFFECT_KEY[cls.effect]] *= valueAt(cls, tier);
     comfort += comfortAt(cls, tier);
+    slots += slotsAt(cls, tier);
   }
-  Object.assign(state.classes, { ownedList, mults, comfort });
+  Object.assign(state.classes, { ownedList, mults, comfort, rigSlots: slots });
 }
 
 // Extra credits per second the next tier would add, against the current room. Approximate, like
 // the old items module: pay and comfort scale the running income; tapMoney scales the tap rate;
 // barBonus the bar payout rate; tapAdvance the extra work taps push into running jobs; rigSpeed the
-// passive income. ctx.tps is 0 outside a session, so tap-side gains are 0 there.
+// passive income. ctx.tps is 0 outside a session, so tap-side gains are 0 there. A rack earns
+// nothing itself; it gets the old racks module's heuristic (1 % of passive income + 1 credit/s) so
+// the shop buys it once cheap job levels are gone.
 function gainOf(state, cfg, ctx, cls, from, to) {
   const ratio = valueAt(cls, to) / valueAt(cls, from);
   const comfortNow = roomComfort(state, cfg);
   const eventNow = from === 0 ? 0 : eventComfortOf(cfg, cls);
-  const eventNext = eventComfortOf(cfg, cls);
-  const comfortRatio = (100 + comfortNow - comfortAt(cls, from) - eventNow + comfortAt(cls, to) + eventNext) / (100 + comfortNow);
+  const comfortRatio = (100 + comfortNow - comfortAt(cls, from) - eventNow + comfortAt(cls, to) + eventComfortOf(cfg, cls)) / (100 + comfortNow);
   const running = state.jobs ? runningIncome(state, cfg, ctx) : 0;
-  const tapRate = (state.jobs && state.taps ? tapMoney(state, cfg, ctx) : 0) * ctx.tps;
+  const passive = state.jobs ? passiveIncome(state, cfg, ctx) : 0;
+  const tapRate = (state.jobs && state.taps && cfg.taps?.enabled !== false ? tapMoney(state, cfg, ctx) : 0) * ctx.tps;
+  const barRate = cfg.bar?.enabled === false ? 0 : tapRate * cfg.bar.bonusTaps / cfg.bar.steps;
   const comfortGain = (running + tapRate) * (comfortRatio - 1);
   switch (cls.effect) {
     case 'pay': return running * (ratio - 1) + comfortGain;
     case 'tapMoney': return tapRate * (ratio - 1) + comfortGain;
-    case 'barBonus': return tapRate * cfg.bar.bonusTaps / cfg.bar.steps * (ratio - 1) + comfortGain;
-    case 'tapAdvance': return running * ctx.tps * cfg.taps.advance * ctx.tapAdvanceMult * (ratio - 1) + comfortGain;
-    case 'rigSpeed': return (state.jobs ? passiveIncome(state, cfg, ctx) : 0) * (ratio - 1) + comfortGain;
+    case 'barBonus': return barRate * (ratio - 1) + comfortGain;
+    case 'tapAdvance': return running * ctx.tps * (cfg.taps?.enabled === false ? 0 : cfg.taps.advance) * ctx.tapAdvanceMult * (ratio - 1) + comfortGain;
+    case 'rigSpeed': return passive * (ratio - 1) + comfortGain;
+    case 'rigSlots': return 0.01 * passive + 1 + comfortGain;
     default: return comfortGain;
   }
 }
@@ -499,30 +423,105 @@ export const classes = {
   },
   metrics(state) {
     const cfg = state.config;
-    const out = { 'classes.owned': ownedClasses(state).length,
-      'classes.tiers': ownedClasses(state).reduce((s, { tier }) => s + tier, 0), 'comfort.total': totalComfort(state) };
+    const owned = ownedClasses(state);
+    const out = { 'classes.owned': owned.length, 'classes.tiers': owned.reduce((s, { tier }) => s + tier, 0),
+      'comfort.total': totalComfort(state), 'slots.rig': rigSlots(state) };
     for (const cls of cfg.classes.list) out[`classes.${cls.id}.tier`] = state.classes.tier[cls.id];
     return out;
   },
 };
 ```
 
-Guard: `cfg.bar` / `cfg.taps` may be disabled; treat a missing or disabled block as rate 0 in `gainOf` (`cfg.bar?.enabled === false ? 0 : …`). The `taps.mjs` `tapMoney` import is a function declaration called at run time, so the cycle taps → jobs, classes → taps is safe; note it in the header.
+`events.mjs`: import `ownedClasses` from `./classes.mjs`; `eventComfortOf(cfg, cls)` reads `cls.event`; `eventsComfort` returns 0 when `!state.classes`, else sums `eventComfortOf(cfg, cls)` over `ownedClasses(state)`. Header comment: "an owned class with an event" instead of "placed decor item".
 
-`events.mjs`: import `ownedClasses` from `./classes.mjs`; `eventComfortOf(cfg, cls)` reads `cls.event`; `eventsComfort` returns 0 when `!state.classes`, else sums `eventComfortOf(cfg, cls)` over `ownedClasses(state)`. Header comment: "a owned class with an event" instead of "placed decor item".
-
-Delete `items.mjs`.
+Delete `items.mjs` and `racks.mjs`. `rigs.mjs` still imports from `racks.mjs` at this point and is fixed in Task 4; `node --test test/classes.test.mjs` does not load rigs, so it runs.
 
 **Step 4: Run the tests**
 
-Run: `node --test test/classes.test.mjs test/room.test.mjs`
+Run: `node --test test/classes.test.mjs`
 Expected: PASS.
 
 **Step 5: Commit**
 
 ```bash
-git add -A tools/sim/model/mods tools/sim/test/classes.test.mjs tools/sim/test/fixtures/starter-base.mjs
-git commit -m "sim: classes module — tiered room classes with per-effect multipliers"
+git add -A tools/sim/model/mods tools/sim/test/classes.test.mjs tools/sim/test/room.test.mjs
+git commit -m "sim: classes module — tiered room classes, per-effect multipliers, rack rig slots"
+```
+
+## Task 4: Rigs take their slots from the rack class
+
+**Files:**
+- Modify: `tools/sim/model/mods/rigs.mjs`
+- Test: `tools/sim/test/rigs.test.mjs`
+
+**Step 1: Write the failing tests**
+
+```js
+import { rigs } from '../model/mods/rigs.mjs';
+import { classes } from '../model/mods/classes.mjs';
+import { jobs } from '../model/mods/jobs.mjs';
+
+const setup = () => {
+  const state = { credits: 0, config: base() };
+  for (const m of [jobs, rigs, classes]) m.init(state, state.config);
+  return state;
+};
+
+test('a rig is offered only for an unlocked, unrigged job while a rack slot is free, and takes the slot', () => {
+  const state = setup();
+  jobs.buy(state, 'job:wifi:lv');
+  assert.deepEqual(rigs.offers(state, ctx()), []);           // no rack yet
+  classes.buy(state, 'class:rack');
+  const [offer] = rigs.offers(state, ctx());
+  assert.deepEqual([offer.id, offer.kind, offer.cost], ['rig:wifi', 'rig', 120]);
+  rigs.buy(state, offer.id);
+  assert.deepEqual(rigs.metrics(state), { 'rigs.count': 1, 'slots.rigFree': 2 });
+  assert.deepEqual(rigs.offers(state, ctx()), []);           // wifi rigged; stream locked
+});
+
+test('a rig for a locked job is not offered', () => {
+  const state = setup();
+  classes.buy(state, 'class:rack');
+  assert.deepEqual(rigs.offers(state, ctx()), []);
+});
+
+test('buying a rig without a free slot throws before the job is marked', () => {
+  const state = setup();
+  jobs.buy(state, 'job:wifi:lv');
+  assert.throws(() => rigs.buy(state, 'rig:wifi'), /no free rig slot/);
+  assert.equal(rigs.metrics(state)['rigs.count'], 0);
+});
+
+test('a rig offer values the job as rigged: runRate with rigSpeedMult applied', () => {
+  const state = setup();
+  jobs.buy(state, 'job:wifi:lv'); classes.buy(state, 'class:rack');
+  const [plain] = rigs.offers(state, ctx());
+  const [fast] = rigs.offers(state, { ...ctx(), rigSpeedMult: 2 });
+  assert.equal(fast.gainPerSec, plain.gainPerSec * 2);
+});
+```
+
+The last test depends on Task 5's `runRate(..., asRigged)`; write it now, expect it to fail until Task 5 lands, and note that in the commit message — or move it to Task 5's jobs tests. Prefer moving it to Task 5.
+
+**Step 2: Run to verify failure**
+
+Run: `node --test test/rigs.test.mjs`
+Expected: FAIL (rigs.mjs imports racks.mjs, which is gone).
+
+**Step 3: Implement**
+
+`rigs.mjs`: import `rigSlots` from `./classes.mjs`; replace `freeSmall(state, cfg) <= 0` with `freeRigSlot(state) <= 0` where `const freeRigSlot = (state) => rigSlots(state) - state.rigs.count;` (rigs placed are counted by this module; no slot list is needed because a rig slot holds nothing but a rig). In `buy`, throw `new Error(\`no free rig slot for ${offerId}\`)` when `freeRigSlot(state) <= 0` before `setRigged`. Metrics: add `'slots.rigFree': freeRigSlot(state)`. Header comment: "A rig needs a free rig slot; the rack class provides them (classes.mjs `rigSlots`)".
+
+**Step 4: Run the tests**
+
+Run: `node --test test/rigs.test.mjs test/classes.test.mjs`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add tools/sim/model/mods/rigs.mjs tools/sim/test/rigs.test.mjs
+git commit -m "sim: rigs take their slots from the rack class"
 ```
 
 ## Task 5: Taps, bar and jobs consume the new multipliers
@@ -571,7 +570,7 @@ Expected: FAIL.
 **Step 3: Implement**
 
 - `jobs.mjs`: `runRate` multiplies by `ctx.speedMult × (isRigged ? ctx.rigSpeedMult : 1)`; add an optional fourth arg to force the rigged view for a rig that is not yet bought: `runRate(state, cfg, id, ctx, asRigged = state.jobs.byId[id].rigged)`. In `tick`, `j.work += dt * ctx.speedMult * (j.rigged ? ctx.rigSpeedMult : 1)`. In `offline`, `runs = Math.floor(secs * ctx.speedMult * ctx.rigSpeedMult / job.time)` (only rigged jobs run there). Count runs: `byId[id].runs = 0` in init, `+1` in `finishRun`, `+runs` in `offline`; export `runsOf(state, id)` and list it in the header's entry points.
-- `rigs.mjs`: the offer's `gainPerSec` is `runRate(state, cfg, rig.job, ctx, true)`.
+- `rigs.mjs`: the offer's `gainPerSec` is `runRate(state, cfg, rig.job, ctx, true)`. Add the rig-offer test from Task 4 ("a rig offer values the job as rigged") to `test/rigs.test.mjs` now.
 - `taps.mjs`: `tapMoney` multiplies by `ctx.tapMult`; `tick` advances by `n × cfg.taps.advance × ctx.tapAdvanceMult`. Header: mention both.
 - `bar.mjs`: the full-bar payout is `cfg.bar.bonusTaps * ctx.barMult * tapMoney(...)`.
 
@@ -725,7 +724,7 @@ function claim(state, ctx) {
 }
 ```
 
-`registry.mjs`: `defaultModules()` returns `[taps, bar, jobs, rigs, room, classes, events, loot, offline]`; `loot` must come after `jobs` (it reads this tick's completions). Update the import lines and the order comment.
+`registry.mjs`: `defaultModules()` returns `[taps, bar, jobs, rigs, classes, events, loot, offline]`; `loot` must come after `jobs` (it reads this tick's completions). Update the import lines and the order comment.
 
 **Step 4: Run the tests**
 
@@ -778,8 +777,9 @@ git commit -m "sim: loot module — expected loot drops per completed run, cashe
     { "job": "kebab",   "name": "Loyalty app exploit",    "cost": 12000 },
     { "job": "dentist", "name": "Ransomware kit",         "cost": 60000 },
     { "job": "radio",   "name": "Transmitter hijack rig", "cost": 250000 } ] },
-  "room": { "enabled": true, "rigSlots": 3 },
   "classes": { "enabled": true, "list": [
+    { "id": "rack", "name": "Rack", "effect": "rigSlots", "tiers": [
+      { "name": "Server rack", "cost": 60, "value": 3, "comfort": 0 } ] },
     { "id": "computer", "name": "Computer", "effect": "pay", "tiers": [
       { "name": "Old laptop",   "cost": 80,   "value": 1.15, "comfort": 0 },
       { "name": "Used desktop", "cost": 350,  "value": 1.35, "comfort": 0 },
@@ -873,7 +873,7 @@ git commit -m "sim ui: classes and loot in the editor, markers and metrics"
 **Files:**
 - Modify: `tools/sim/README.md`, `tools/sim/cli.mjs` (help text paths), `tools/sim/test/cli.test.mjs` (expected transcripts)
 
-**Steps:** Rewrite the config section of `README.md` for schema 2 (the block list, the class and tier rules, the loot rule, the four new multipliers, the purchase kinds `level class tier rig`, the `loot` timeline kind, the metrics `classes.owned`, `classes.tiers`, `classes.<id>.tier`, `comfort.total`, `slots.rigFree`, `loot.pending`, `loot.earned`, `loot.drops`, `firstEvent:loot`). Replace every example path (`racks.cost`, `items.list[gpu].pay`) with `room.rigSlots`, `classes.list[desk].tiers[1].cost`, `loot.chance`. Re-run each CLI example in the README and paste the real output. Update the help text in `cli.mjs` the same way, and the expected strings in `cli.test.mjs`. Run `npm test`; commit:
+**Steps:** Rewrite the config section of `README.md` for schema 2 (the block list, the class and tier rules, the loot rule, the four new multipliers, the purchase kinds `level class tier rig`, the `loot` timeline kind, the metrics `classes.owned`, `classes.tiers`, `classes.<id>.tier`, `comfort.total`, `slots.rig`, `slots.rigFree`, `loot.pending`, `loot.earned`, `loot.drops`, `firstEvent:loot`). Replace every example path (`racks.cost`, `items.list[gpu].pay`) with `classes.list[rack].tiers[0].value`, `classes.list[desk].tiers[1].cost`, `loot.chance`. Re-run each CLI example in the README and paste the real output. Update the help text in `cli.mjs` the same way, and the expected strings in `cli.test.mjs`. Run `npm test`; commit:
 
 ```bash
 git add tools/sim/README.md tools/sim/cli.mjs tools/sim/test/cli.test.mjs
@@ -885,7 +885,7 @@ git commit -m "sim docs: schema 2 contract, paths and examples"
 Not code. With the sim green:
 
 1. `node cli.mjs run --config presets/starter-2026-10-28.json --profile profiles/active.json --targets targets/seven-day-idle.json` and the same for `casual`. Note the verdicts, `purchasesPerDay`, `purchasesByKindPerDay`, day-7 credits, `loot.earned`.
-2. Sweep the levers most likely to move a failing target: `loot.chance` (0.02, 0.03, 0.05), `classes.list[tower].tiers[0].cost`, `rigs.list[kebab].cost`, `jobs.list[radio].pay`, and `room.rigSlots` (3 against 4, to see what the shelf costs the curve).
+2. Sweep the levers most likely to move a failing target: `loot.chance` (0.02, 0.03, 0.05), `classes.list[tower].tiers[0].cost`, `rigs.list[kebab].cost`, `jobs.list[radio].pay`, and `classes.list[rack].tiers[0].value` (3 against 4, to see what the shelf size costs the curve).
 3. Write the results to `docs/plans/2026-10-28-starter-home-numbers.md` as a table per sweep with a recommendation, and stop for the user's decision. The chosen numbers become the committed preset; regenerate the fixture with them and note the baseline in `test/fixtures/README.md`.
 
 ## Out of scope, next plan
