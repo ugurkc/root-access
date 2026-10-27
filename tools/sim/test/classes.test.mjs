@@ -74,20 +74,52 @@ test('gainPerSec is finite for every effect, with and without running jobs', () 
 
 test('with the classes block disabled comfort is 0, events add nothing and there are no rig slots', () => {
   const state = { credits: 0, config: base() };
+  state.config.classes.enabled = false;                 // the core then never calls classes.init
   assert.equal(eventsComfort(state, state.config), 0);
+  assert.equal(totalComfort(state), 0);
+  assert.deepEqual(ownedClasses(state), []);
   assert.equal(rigSlots(state), 0);
 });
 
-// A room with wifi unlocked and in a run: pay-side gains follow the running income, tap-side gains
-// follow ctx.tps and are 0 offline.
-test('gainPerSec scales the running income by the tier\'s effect; tap-side effects earn nothing at tps 0', () => {
-  const state = { credits: 0, config: base() };
-  for (const m of [taps, jobs, classes]) m.init(state, state.config);
+// A room with wifi unlocked and in a run, so the running income is positive.
+function runningRoom(config) {
+  const state = { credits: 0, config };
+  for (const m of [taps, jobs, classes]) m.init(state, config);
   jobs.buy(state, 'job:wifi:lv');
   const running = { ...ctx(), policy: { restartManualJobs: true } };
   jobs.tick(state, 0.01, running);
-  const income = runningIncome(state, state.config, running);
+  const income = runningIncome(state, config, running);
   assert.ok(income > 0);
+  return { state, income };
+}
+
+test('an upgrade values the step between tiers and the comfort change alone; the event is already counted', () => {
+  const config = base();
+  config.classes.list.push({ id: 'lamp', name: 'Lamp', effect: 'pay', event: { boost: 20, dur: 30 }, tiers: [
+    { name: 'Dim lamp', cost: 50, value: 1.2, comfort: 5 }, { name: 'Bright lamp', cost: 200, value: 1.5, comfort: 8 },
+  ] });
+  const { state, income } = runningRoom(config);
+  classes.buy(state, 'class:lamp');
+  const now = totalComfort(state) + eventsComfort(state, config);    // 5 + 20 × 30 × 0.7 / 90
+  close(now, 5 + 20 * 30 * 0.7 / 90);
+  const offer = classes.offers(state, { ...ctx(), tps: 0 }).find((o) => o.id === 'class:lamp');
+  assert.equal(offer.kind, 'tier');
+  close(offer.gainPerSec, income * (1.5 / 1.2 - 1) + income * ((100 + now - 5 + 8) / (100 + now) - 1));
+});
+
+test('two classes sharing an effect multiply', () => {
+  const config = base();
+  config.classes.list.push({ id: 'gpu', name: 'GPU', effect: 'pay', tiers: [{ name: 'Old GPU', cost: 90, value: 1.4, comfort: 0 }] });
+  const state = { credits: 0, config };
+  classes.init(state, config);
+  classes.buy(state, 'class:computer');
+  classes.buy(state, 'class:gpu');
+  close(classes.multipliers(state).payMult, 1.15 * 1.4);              // not 1.15 + 0.4
+});
+
+// Pay-side gains follow the running income, tap-side gains follow ctx.tps and are 0 offline.
+test('gainPerSec scales the running income by the tier\'s effect; tap-side effects earn nothing at tps 0', () => {
+  const { state, income } = runningRoom(base());
   const offer = (id, tps) => classes.offers(state, { ...ctx(), tps }).find((o) => o.id === `class:${id}`);
   close(offer('computer', 0).gainPerSec, income * (1.15 - 1));        // comfort 0, so no comfort share
   assert.equal(offer('router', 0).gainPerSec, 0);                     // tapAdvance: nothing without taps

@@ -7,12 +7,14 @@
 // the owned classes' events (events.mjs). Ownership changes only in buy(), so the owned list, the
 // multiplier products and the slot count are cached there.
 //
-// The layout of `state.classes` is private; other modules use:
+// The layout of `state.classes` is private; other modules use these, each neutral ([] or 0) when
+// the block is off and `state.classes` is absent:
 //   ownedClasses(state)       [{ cls, tier }]          (events)
 //   totalComfort(state)       owned tiers' comfort alone
-//   rigSlots(state)           rig slots the owned rack tiers provide; 0 when the block is off (rigs)
+//   rigSlots(state)           rig slots the owned rack tiers provide (rigs)
 // classes.mjs and events.mjs import each other; the cycle is safe only while every cross-import
-// is a function declaration called at run time. Same for taps.mjs (tapMoney).
+// is a function declaration called at run time. classes.mjs also imports jobs.mjs and taps.mjs,
+// which do not import back.
 import { runningIncome, passiveIncome } from './jobs.mjs';
 import { tapMoney } from './taps.mjs';
 import { eventsComfort, eventComfortOf } from './events.mjs';
@@ -26,11 +28,11 @@ const comfortAt = (cls, tier) => tierAt(cls, tier)?.comfort ?? 0;
 const slotsAt = (cls, tier) => (cls.effect === 'rigSlots' ? tierAt(cls, tier)?.value ?? 0 : 0);
 
 export function ownedClasses(state) {
-  return state.classes.ownedList;
+  return state.classes ? state.classes.ownedList : [];
 }
 
 export function totalComfort(state) {
-  return state.classes.comfort;
+  return state.classes ? state.classes.comfort : 0;
 }
 
 export function rigSlots(state) {
@@ -62,7 +64,7 @@ function refresh(state, cfg) {
 // room. Approximate, like the old items module: pay and comfort scale the running income; tapMoney
 // scales the tap rate; barBonus the bar payout rate; tapAdvance the extra work taps push into
 // running jobs; rigSpeed the passive income. ctx.tps is 0 outside a session, so tap-side gains are
-// 0 there. A rack earns nothing itself; it keeps the old racks module's heuristic (1 % of passive
+// 0 there. A rack earns nothing itself; it gets the rack heuristic from the plan (1 % of passive
 // income + 1 credit/s) so the shop buys it once cheap job levels are gone.
 function gainOf(state, cfg, ctx, cls, from, to) {
   const ratio = valueAt(cls, to) / valueAt(cls, from);
@@ -71,7 +73,7 @@ function gainOf(state, cfg, ctx, cls, from, to) {
   const comfortRatio = (100 + comfortNow - comfortAt(cls, from) + comfortAt(cls, to) + eventGain) / (100 + comfortNow);
   const running = state.jobs ? runningIncome(state, cfg, ctx) : 0;
   const passive = state.jobs ? passiveIncome(state, cfg, ctx) : 0;
-  const tapsOn = Boolean(state.jobs && state.taps);
+  const tapsOn = Boolean(state.taps);                                  // tapMoney guards state.jobs itself
   const tapRate = (tapsOn ? tapMoney(state, cfg, ctx) : 0) * ctx.tps;
   const barRate = state.bar ? tapRate * cfg.bar.bonusTaps / cfg.bar.steps : 0;
   const comfortGain = (running + tapRate) * (comfortRatio - 1);
