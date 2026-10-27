@@ -3,7 +3,7 @@
 
 export const tier = (over = {}) => ({ name: 'Simple desk', cost: 30, value: 1.25, comfort: 2, ...over });
 
-const tiers = (effectTiers) => effectTiers.map(([name, cost, value, comfort]) => ({ name, cost, value, comfort }));
+const tiers = (effectTiers) => effectTiers.map(([name, cost, value, comfort]) => ({ name, cost, value, comfort })); // [name, cost, value, comfort]
 
 export const base = () => ({
   schema: 2,

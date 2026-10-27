@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { SHAPES, validateConfig, SCHEMA } from '../model/config.mjs';
 import { base, tier } from './fixtures/starter-base.mjs';
 
-// In base(): desk is classes.list[3], cat is classes.list[5].
-const DESK = 3;
-const CAT = 5;
+const idx = (id) => base().classes.list.findIndex((c) => c.id === id);
+const DESK = idx('desk');
+const CAT = idx('cat');
 
 const broken = (mutate) => { const bad = base(); mutate(bad); return validateConfig(bad); };
 const reportsAt = (errs, path) => assert.ok(errs.some((e) => e.path === path), JSON.stringify(errs));
@@ -67,16 +67,16 @@ test('a class needs at least one tier, a known effect and unique ids', () => {
   cfg.classes.list[DESK].tiers = [];
   cfg.classes.list[CAT].effect = 'speed';
   cfg.classes.list.push({ id: 'desk', name: 'Again', effect: 'none', tiers: [tier()] });
+  const last = cfg.classes.list.length - 1;
   const paths = validateConfig(cfg).map((e) => `${e.path}: ${e.message}`);
   assert.ok(paths.includes(`classes.list[${DESK}].tiers: at least one tier`), paths);
   assert.ok(paths.some((p) => p.startsWith(`classes.list[${CAT}].effect: expected one of`)), paths);
-  assert.ok(paths.includes('classes.list[7].id: duplicate id "desk"'), paths);
+  assert.ok(paths.includes(`classes.list[${last}].id: duplicate id "desk"`), paths);
 });
 
-test('a class with a broken tier is not also reported as having no tiers', () => {
-  const errs = broken((c) => { c.classes.list[DESK].tiers = [{ name: 'Half' }]; });
-  assert.ok(errs.length > 0);
-  assert.ok(errs.every((e) => e.message !== 'at least one tier'), JSON.stringify(errs));
+test('a class that is not an object or whose tiers is not an array is one shape error, not a tiers error', () => {
+  assert.deepEqual(broken((c) => { c.classes.list[DESK] = 5; }), [{ path: `classes.list[${DESK}]`, message: 'expected object, got number' }]);
+  assert.deepEqual(broken((c) => { c.classes.list[DESK].tiers = 'x'; }), [{ path: `classes.list[${DESK}].tiers`, message: 'expected array, got string' }]);
 });
 
 test('tier value is at least 1 and comfort at least 0', () => {
@@ -110,8 +110,9 @@ test('loot chance accepts the bounds 0 and 1 and rejects negatives and NaN', () 
   reportsAt(broken((c) => { c.loot.chance = '0.5'; }), 'loot.chance');
 });
 
-test('job loot is optional and negative loot payRuns is reported', () => {
+test('job loot is optional; loot payRuns may be zero but not negative', () => {
   assert.deepEqual(broken((c) => { delete c.jobs.list[0].loot; }), []);
+  assert.deepEqual(broken((c) => { c.loot.payRuns = 0; }), []);
   reportsAt(broken((c) => { c.loot.payRuns = -1; }), 'loot.payRuns');
 });
 
