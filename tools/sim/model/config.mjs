@@ -1,15 +1,17 @@
 // Config schema and validator for the balance simulator.
-// A shape is num | pos | atLeast(n) | nonNegInt | bool | str | enumOf([...]) | list(shape) | record(required, optional).
+// A shape is num | pos | atLeast(n) | nonNegInt | prob | bool | str | enumOf([...]) | list(shape) | record(required, optional).
 // `pos` is a finite number > 0: durations, prices and growth factors that would divide by or loop on zero.
 // `atLeast(n)` is a finite number ≥ n: multipliers (≥ 1) and amounts that may be zero but not negative.
 // `nonNegInt` is an integer ≥ 0: slot counts.
+// `prob` is a finite number in [0, 1]: chances rolled per run.
 
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 
 export const num = 'number';
 export const pos = { kind: 'pos' };
 export const atLeast = (min) => ({ kind: 'atLeast', min });
 export const nonNegInt = { kind: 'nonNegInt' };
+export const prob = { kind: 'prob' };
 export const bool = 'boolean';
 export const str = 'string';
 export const enumOf = (values) => ({ kind: 'enum', values });
@@ -23,18 +25,23 @@ export const SHAPES = {
   bar: record({ enabled: bool, steps: pos, bonusTaps: pos, speed: num, speedDur: pos }),
   jobs: record({
     enabled: bool, maxLevel: num, milestones: list(num), revealAt: num,
-    list: list(record({ id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num })),
+    list: list(record(
+      { id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num },
+      { loot: list(str) },
+    )),
   }),
   rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) }),
-  racks: record({ enabled: bool, largeSlots: nonNegInt, decorSlots: nonNegInt, cost: pos, r: pos, holds: nonNegInt }),
-  items: record({
-    enabled: bool, maxLevel: atLeast(1), r: pos, growPerLevel: num, techComfortFlat: bool,
+  room: record({ enabled: bool, rigSlots: nonNegInt }),
+  classes: record({
+    enabled: bool,
     list: list(record(
-      { id: str, type: enumOf(['tech', 'decor']), name: str, cost: pos, comfort: atLeast(0) },
-      { size: enumOf(['small', 'large']), pay: atLeast(1), speed: atLeast(1), event: record({ boost: atLeast(0), dur: atLeast(0) }) },
+      { id: str, name: str, effect: enumOf(['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'none']),
+        tiers: list(record({ name: str, cost: pos, value: atLeast(1), comfort: atLeast(0) })) },
+      { event: record({ boost: atLeast(0), dur: atLeast(0) }) },
     )),
   }),
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
+  loot: record({ enabled: bool, chance: prob, payRuns: atLeast(0) }),
   offline: record({ enabled: bool, capHours: pos }),
 };
 
@@ -68,6 +75,10 @@ function check(value, shape, path, errs) {
   }
   if (shape.kind === 'nonNegInt') {
     if (!(Number.isInteger(value) && value >= 0)) fail(`expected non-negative integer, got ${shown}`);
+    return;
+  }
+  if (shape.kind === 'prob') {
+    if (!(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1)) fail(`expected number between 0 and 1, got ${shown}`);
     return;
   }
   if (shape.kind === 'enum') {
@@ -129,13 +140,14 @@ function checkEventsInterval(cfg, errs) {
   if (!(cfg.events.min + cfg.events.max > 0)) errs.push({ path: 'events.min', message: 'min + max must be positive' });
 }
 
-// Tech items need a size to pick a slot; decor has its own slots and no size.
-function checkItemSizes(cfg, errs) {
-  if (!clean(errs, 'items.list') || !Array.isArray(cfg.items?.list)) return;
-  cfg.items.list.forEach((item, i) => {
-    const path = `items.list[${i}].size`;
-    if (item.type === 'tech' && !('size' in item)) errs.push({ path, message: 'tech items need a size' });
-    if (item.type === 'decor' && 'size' in item) errs.push({ path, message: 'decor items have no size' });
+// A class is bought tier by tier, so a class without tiers could never be offered. An empty list is
+// its own root cause, so this is reported alongside other errors in the class rather than hidden by them.
+function checkClassTiers(cfg, errs) {
+  if (!Array.isArray(cfg.classes?.list)) return;
+  cfg.classes.list.forEach((cls, i) => {
+    if (isRecord(cls) && Array.isArray(cls.tiers) && cls.tiers.length === 0) {
+      errs.push({ path: `classes.list[${i}].tiers`, message: 'at least one tier' });
+    }
   });
 }
 
@@ -145,9 +157,9 @@ export function validateConfig(cfg) {
   if (!isRecord(cfg)) return errs;
   checkSchema(cfg, errs);
   checkDuplicateIds(cfg, 'jobs', errs);
-  checkDuplicateIds(cfg, 'items', errs);
+  checkDuplicateIds(cfg, 'classes', errs);
   checkRigJobs(cfg, errs);
   checkEventsInterval(cfg, errs);
-  checkItemSizes(cfg, errs);
+  checkClassTiers(cfg, errs);
   return errs;
 }

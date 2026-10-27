@@ -1,128 +1,138 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { validateConfig } from '../model/config.mjs';
+import { SHAPES, validateConfig, SCHEMA } from '../model/config.mjs';
+import { base, tier } from './fixtures/starter-base.mjs';
 
-const preset = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
+// In base(): desk is classes.list[3], cat is classes.list[5].
+const DESK = 3;
+const CAT = 5;
 
-test('the v2 preset validates', () => {
-  assert.deepEqual(validateConfig(preset), []);
+const broken = (mutate) => { const bad = base(); mutate(bad); return validateConfig(bad); };
+const reportsAt = (errs, path) => assert.ok(errs.some((e) => e.path === path), JSON.stringify(errs));
+
+test('schema is 2 and the blocks are the starter home set', () => {
+  assert.equal(SCHEMA, 2);
+  assert.deepEqual(Object.keys(SHAPES), ['schema', 'taps', 'bar', 'jobs', 'rigs', 'room', 'classes', 'events', 'loot', 'offline']);
+  assert.deepEqual(validateConfig(base()), []);
+});
+
+test('items and racks blocks are rejected as unknown', () => {
+  const cfg = base();
+  cfg.items = { enabled: false };
+  assert.deepEqual(validateConfig(cfg).map((e) => e.path), ['items']);
+  cfg.racks = { enabled: false };
+  assert.deepEqual(validateConfig(cfg).map((e) => e.path), ['items', 'racks']);
 });
 
 test('unknown block is reported with its path', () => {
-  const errs = validateConfig({ ...preset, bogus: {} });
-  assert.ok(errs.some(e => e.path === 'bogus'));
+  assert.ok(broken((c) => { c.bogus = {}; }).some((e) => e.path === 'bogus'));
 });
 
 test('wrong type is reported with its path', () => {
-  const bad = structuredClone(preset);
-  bad.jobs.list[0].cost = 'six';
-  assert.ok(validateConfig(bad).some(e => e.path === 'jobs.list[0].cost'));
+  reportsAt(broken((c) => { c.jobs.list[0].cost = 'six'; }), 'jobs.list[0].cost');
 });
 
 test('a zero rig price is reported at its path', () => {
-  const bad = structuredClone(preset);
-  bad.rigs.list[0].cost = 0;
-  assert.ok(validateConfig(bad).some(e => e.path === 'rigs.list[0].cost'));
+  reportsAt(broken((c) => { c.rigs.list[0].cost = 0; }), 'rigs.list[0].cost');
 });
 
 test('rig must reference an existing job', () => {
-  const bad = structuredClone(preset);
-  bad.rigs.list[0].job = 'nope';
-  assert.ok(validateConfig(bad).some(e => e.path === 'rigs.list[0].job'));
+  reportsAt(broken((c) => { c.rigs.list[0].job = 'nope'; }), 'rigs.list[0].job');
 });
 
 test('a non-object config is an error, not a crash', () => {
-  assert.ok(validateConfig(null).some(e => e.path === ''));
+  assert.ok(validateConfig(null).some((e) => e.path === ''));
 });
 
 test('unsupported schema version is reported', () => {
-  const errs = validateConfig({ ...preset, schema: 2 });
-  assert.deepEqual(errs, [{ path: 'schema', message: 'unsupported schema 2, expected 1' }]);
+  assert.deepEqual(broken((c) => { c.schema = 1; }), [{ path: 'schema', message: 'unsupported schema 1, expected 2' }]);
 });
 
 test('NaN and Infinity are not numbers', () => {
-  const bad = structuredClone(preset);
-  bad.taps.rate = NaN;
-  bad.bar.speed = Infinity;
-  const paths = validateConfig(bad).map(e => e.path);
+  const paths = broken((c) => { c.taps.rate = NaN; c.bar.speed = Infinity; }).map((e) => e.path);
   assert.deepEqual(paths, ['taps.rate', 'bar.speed']);
 });
 
 test('a malformed rig yields one root-cause error, not a cascade', () => {
-  const bad = structuredClone(preset);
-  delete bad.rigs.list[0].job;
-  assert.deepEqual(validateConfig(bad), [{ path: 'rigs.list[0].job', message: 'missing required key' }]);
+  assert.deepEqual(broken((c) => { delete c.rigs.list[0].job; }), [{ path: 'rigs.list[0].job', message: 'missing required key' }]);
 });
 
-test('duplicate ids are reported at the second occurrence', () => {
-  const bad = structuredClone(preset);
-  bad.jobs.list[1].id = 'wifi';
-  bad.items.list[2].id = 'gpu';
-  const errs = validateConfig(bad);
-  assert.ok(errs.some(e => e.path === 'jobs.list[1].id' && e.message === 'duplicate id "wifi"'));
-  assert.ok(errs.some(e => e.path === 'items.list[2].id' && e.message === 'duplicate id "gpu"'));
+test('duplicate job ids are reported at the second occurrence', () => {
+  const errs = broken((c) => { c.jobs.list[1].id = 'wifi'; });
+  assert.deepEqual(errs, [{ path: 'jobs.list[1].id', message: 'duplicate id "wifi"' }]);
 });
 
-test('item type and size are enums', () => {
-  const bad = structuredClone(preset);
-  bad.items.list[0].type = 'weird';
-  bad.items.list[1].size = 'huge';
-  const paths = validateConfig(bad).map(e => e.path);
-  assert.deepEqual(paths, ['items.list[0].type', 'items.list[1].size']);
+test('a class needs at least one tier, a known effect and unique ids', () => {
+  const cfg = base();
+  cfg.classes.list[DESK].tiers = [];
+  cfg.classes.list[CAT].effect = 'speed';
+  cfg.classes.list.push({ id: 'desk', name: 'Again', effect: 'none', tiers: [tier()] });
+  const paths = validateConfig(cfg).map((e) => `${e.path}: ${e.message}`);
+  assert.ok(paths.includes(`classes.list[${DESK}].tiers: at least one tier`), paths);
+  assert.ok(paths.some((p) => p.startsWith(`classes.list[${CAT}].effect: expected one of`)), paths);
+  assert.ok(paths.includes('classes.list[7].id: duplicate id "desk"'), paths);
+});
+
+test('a class with a broken tier is not also reported as having no tiers', () => {
+  const errs = broken((c) => { c.classes.list[DESK].tiers = [{ name: 'Half' }]; });
+  assert.ok(errs.length > 0);
+  assert.ok(errs.every((e) => e.message !== 'at least one tier'), JSON.stringify(errs));
+});
+
+test('tier value is at least 1 and comfort at least 0', () => {
+  const paths = broken((c) => {
+    c.classes.list[DESK].tiers[0].value = 0.9;
+    c.classes.list[DESK].tiers[0].comfort = -1;
+  }).map((e) => e.path);
+  assert.deepEqual(paths, [`classes.list[${DESK}].tiers[0].value`, `classes.list[${DESK}].tiers[0].comfort`]);
+});
+
+test('a zero tier cost is reported: it is a price', () => {
+  reportsAt(broken((c) => { c.classes.list[DESK].tiers[0].cost = 0; }), `classes.list[${DESK}].tiers[0].cost`);
+});
+
+test('class event is optional, but its boost and duration must not be negative', () => {
+  assert.deepEqual(broken((c) => { delete c.classes.list[CAT].event; }), []);
+  reportsAt(broken((c) => { c.classes.list[CAT].event.boost = -1; }), `classes.list[${CAT}].event.boost`);
+  reportsAt(broken((c) => { c.classes.list[CAT].event.dur = -1; }), `classes.list[${CAT}].event.dur`);
+});
+
+test('loot chance is a probability and job loot texts are strings', () => {
+  const paths = broken((c) => { c.loot.chance = 1.5; c.jobs.list[0].loot = [3]; }).map((e) => e.path);
+  assert.deepEqual(paths, ['jobs.list[0].loot[0]', 'loot.chance']);
+});
+
+test('loot chance accepts the bounds 0 and 1 and rejects negatives and NaN', () => {
+  assert.deepEqual(broken((c) => { c.loot.chance = 0; }), []);
+  assert.deepEqual(broken((c) => { c.loot.chance = 1; }), []);
+  reportsAt(broken((c) => { c.loot.chance = -0.1; }), 'loot.chance');
+  reportsAt(broken((c) => { c.loot.chance = NaN; }), 'loot.chance');
+  reportsAt(broken((c) => { c.loot.chance = '0.5'; }), 'loot.chance');
+});
+
+test('job loot is optional and negative loot payRuns is reported', () => {
+  assert.deepEqual(broken((c) => { delete c.jobs.list[0].loot; }), []);
+  reportsAt(broken((c) => { c.loot.payRuns = -1; }), 'loot.payRuns');
+});
+
+test('room rig slots are a non-negative integer', () => {
+  reportsAt(broken((c) => { c.room.rigSlots = -1; }), 'room.rigSlots');
+  reportsAt(broken((c) => { c.room.rigSlots = 1.5; }), 'room.rigSlots');
+  assert.deepEqual(broken((c) => { c.room.rigSlots = 0; }), []);
 });
 
 test('a missing block is exactly one missing-key error', () => {
-  const bad = structuredClone(preset);
-  delete bad.offline;
-  assert.deepEqual(validateConfig(bad), [{ path: 'offline', message: 'missing required key' }]);
+  assert.deepEqual(broken((c) => { delete c.offline; }), [{ path: 'offline', message: 'missing required key' }]);
+  assert.deepEqual(broken((c) => { delete c.loot; }), [{ path: 'loot', message: 'missing required key' }]);
 });
 
 test('a zero job time is reported: times, costs and growth must be positive', () => {
-  const bad = structuredClone(preset);
-  bad.jobs.list[0].time = 0;
-  bad.offline.capHours = -1;
-  const paths = validateConfig(bad).map(e => e.path);
+  const paths = broken((c) => { c.jobs.list[0].time = 0; c.offline.capHours = -1; }).map((e) => e.path);
   assert.ok(paths.includes('jobs.list[0].time'));
   assert.ok(paths.includes('offline.capHours'));
 });
 
-const broken = (mutate) => { const bad = structuredClone(preset); mutate(bad); return validateConfig(bad); };
-const reportsAt = (errs, path) => assert.ok(errs.some(e => e.path === path), JSON.stringify(errs));
-
-test('an item pay below 1 is reported: it is a multiplier', () => {
-  reportsAt(broken(c => { c.items.list[0].pay = 0.9; }), 'items.list[0].pay');
-});
-
-test('an item speed below 1 is reported', () => {
-  reportsAt(broken(c => { c.items.list[1].speed = 0.5; }), 'items.list[1].speed');
-});
-
-test('negative item comfort is reported', () => {
-  reportsAt(broken(c => { c.items.list[0].comfort = -1; }), 'items.list[0].comfort');
-});
-
-test('negative event boost or duration is reported', () => {
-  reportsAt(broken(c => { c.items.list[5].event.boost = -1; }), 'items.list[5].event.boost');
-  reportsAt(broken(c => { c.items.list[5].event.dur = -1; }), 'items.list[5].event.dur');
-});
-
 test('events.min + max must be positive: the mean interval divides', () => {
-  reportsAt(broken(c => { c.events.min = 0; c.events.max = 0; }), 'events.min');
-  assert.deepEqual(broken(c => { c.events.min = 0; c.events.max = 10; }), []);
-});
-
-test('rack slot counts are non-negative integers', () => {
-  reportsAt(broken(c => { c.racks.largeSlots = -1; }), 'racks.largeSlots');
-  reportsAt(broken(c => { c.racks.decorSlots = 1.5; }), 'racks.decorSlots');
-  reportsAt(broken(c => { c.racks.holds = -2; }), 'racks.holds');
-});
-
-test('items.maxLevel must be at least 1', () => {
-  reportsAt(broken(c => { c.items.maxLevel = 0; }), 'items.maxLevel');
-});
-
-test('tech items need a size and decor items must not have one', () => {
-  reportsAt(broken(c => { delete c.items.list[0].size; }), 'items.list[0].size');
-  reportsAt(broken(c => { c.items.list[5].size = 'small'; }), 'items.list[5].size');
+  reportsAt(broken((c) => { c.events.min = 0; c.events.max = 0; }), 'events.min');
+  assert.deepEqual(broken((c) => { c.events.min = 0; c.events.max = 10; }), []);
 });
