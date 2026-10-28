@@ -15,14 +15,19 @@ export function kindOf(shape) {
   return shape.kind;
 }
 
-export const NUMERIC_KINDS = new Set(['num', 'pos', 'atLeast', 'nonNegInt']);
+export const NUMERIC_KINDS = new Set(['num', 'pos', 'atLeast', 'nonNegInt', 'prob']);
 
+// A list whose entries are records: a table when it is a block's field, a JSON cell inside a table.
+export const isRecordList = (shape) => kindOf(shape) === 'list' && kindOf(shape.of) === 'record';
+
+// Field descriptor: `min`/`max` are what the number input renders, not what the validator enforces.
 function describe(name, shape, optional) {
   const d = { name, kind: kindOf(shape), optional, shape };
   if (d.kind === 'enum') d.options = shape.values;
   if (d.kind === 'atLeast') d.min = shape.min;
   if (d.kind === 'pos') d.min = 0;
   if (d.kind === 'nonNegInt') d.min = 0;
+  if (d.kind === 'prob') { d.min = 0; d.max = 1; }
   return d;
 }
 
@@ -36,7 +41,8 @@ export function fieldsFor(shape) {
 }
 
 // Columns for a table of records: fieldsFor() with nested records flattened to dotted names
-// (items: event → event.boost, event.dur). A sub-field of an optional record is optional too.
+// (classes: event → event.boost, event.dur). A sub-field of an optional record is optional too.
+// A nested list of records (classes: tiers) stays one column, edited as JSON.
 export function columnsFor(shape) {
   const out = [];
   for (const f of fieldsFor(shape)) {
@@ -51,19 +57,33 @@ export function columnsFor(shape) {
 // Non-numeric text for a numeric kind → NaN, so the validator, not the editor, rejects it.
 // A list of scalars is edited as comma-separated text; empty tokens ('1,,2' or a trailing comma)
 // are dropped, so empty text is an empty list.
+// A list of records is edited as JSON text: the parsed array when the text is one, else undefined
+// (the key is removed and the validator reports it missing; a record that parses but is incomplete
+// is reported field by field).
 export function formValue(shape, raw) {
   const kind = kindOf(shape);
   if (kind === 'bool') return typeof raw === 'boolean' ? raw : String(raw).trim() === 'true';
   const text = raw == null ? '' : String(raw).trim();
+  if (isRecordList(shape)) return parseJsonArray(text);
   if (kind === 'list') return text.split(',').map((s) => s.trim()).filter((s) => s !== '').map((s) => formValue(shape.of, s));
   if (text === '') return undefined;
   if (kind === 'str' || kind === 'enum') return text;
   return Number(text);
 }
 
+function parseJsonArray(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Config value → text for a control. Inverse of formValue for everything a control can hold.
 export function displayValue(shape, value) {
   if (value === undefined || value === null) return '';
+  if (isRecordList(shape)) return JSON.stringify(value);
   if (kindOf(shape) === 'list') return value.map((v) => displayValue(shape.of, v)).join(', ');
   return String(value);
 }

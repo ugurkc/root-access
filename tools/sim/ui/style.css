@@ -148,6 +148,7 @@ tbody tr:nth-child(even) { background: var(--panel-2); }
 td input[type="number"] { width: 6.5em; }
 td input[type="text"] { min-width: 7em; }
 td.name input[type="text"] { min-width: 12em; }
+td input.cell-json { min-width: 28em; font-size: 14px; }
 td.remove button { padding: 0 6px; }
 .add-row { margin-top: 6px; }
 

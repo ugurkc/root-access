@@ -8,14 +8,14 @@ import { toJs, fromJs, PREFIX } from '../model/convert.mjs';
 import { setPath } from '../model/sweep.mjs';
 import { fmt, fmtMetric } from './format.mjs';
 import {
-  EDITABLE_BLOCKS, NUMERIC_KINDS, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors, holderPathFor,
+  EDITABLE_BLOCKS, NUMERIC_KINDS, isRecordList, fieldsFor, columnsFor, formValue, displayValue, getAt, setAt, blankRow, groupErrors, holderPathFor,
 } from './editor.mjs';
 import { $, el, download, readFileEvent } from './dom.mjs';
 import { seriesFromResult, renderCharts, clearCharts } from './charts.mjs';
 import { createTargetsPanel } from './targets-panel.mjs';
 import { createSweepPanel } from './sweep-panel.mjs';
 
-const METRICS_SHOWN = ['rigs.count', 'items.placed', 'offersLeft.final', 'shop.capHits'];
+const METRICS_SHOWN = ['rigs.count', 'classes.owned', 'classes.tiers', 'loot.earned', 'offersLeft.final', 'shop.capHits'];
 const DEFAULT_TARGETS = '../targets/seven-day-idle.json';
 const FROM_SWEEP = ' · from sweep';
 
@@ -143,7 +143,7 @@ function renderBlock(block) {
   for (const f of fieldsFor(shape)) {
     if (f.name === 'enabled') continue;
     const path = `${block}.${f.name}`;
-    if (f.kind === 'list' && typeof f.shape.of === 'object' && f.shape.of.kind === 'record') tables.push(renderTable(path, f));
+    if (isRecordList(f.shape)) tables.push(renderTable(path, f));
     else scalars.append(renderField(path, f));
   }
   if (scalars.children.length) fs.append(scalars);
@@ -151,7 +151,7 @@ function renderBlock(block) {
   return fs;
 }
 
-// A labelled control for one scalar (or list-of-scalars) field.
+// A labelled control for one scalar (or list) field.
 function renderField(path, f) {
   const wrap = el('label', { class: `field${f.optional ? ' optional' : ''}`, 'data-path': path }, [el('span', { text: f.name })]);
   wrap.append(control(path, f), el('small', { class: 'err' }));
@@ -172,8 +172,12 @@ function control(path, f) {
     input = el('select', {}, options.map((o) => el('option', { value: o, text: o === '' ? '—' : o })));
     input.value = current;
   } else if (NUMERIC_KINDS.has(f.kind)) {
-    input = el('input', { type: 'number', step: f.kind === 'nonNegInt' ? '1' : 'any', min: f.min });
+    input = el('input', { type: 'number', step: f.kind === 'nonNegInt' ? '1' : 'any', min: f.min, max: f.max });
     input.value = Number.isNaN(value) ? '' : displayValue(f.shape, value);
+  } else if (isRecordList(f.shape)) {
+    // A nested table (a class's tiers) is one JSON cell; the validator reports each bad field in it.
+    input = el('input', { type: 'text', class: 'cell-json', spellcheck: 'false', placeholder: '[{"name": "…", "cost": 1, …}]' });
+    input.value = displayValue(f.shape, value);
   } else {
     input = el('input', { type: 'text', placeholder: f.kind === 'list' ? 'a, b, c' : '' });
     input.value = displayValue(f.shape, value);
