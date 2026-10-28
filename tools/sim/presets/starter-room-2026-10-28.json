@@ -1,0 +1,521 @@
+{
+  "schema": 2,
+  "taps": {
+    "enabled": true,
+    "rate": 0.25,
+    "minMoney": 1,
+    "advance": 0.25
+  },
+  "bar": {
+    "enabled": true,
+    "steps": 10,
+    "bonusTaps": 15,
+    "speed": 0.25,
+    "speedDur": 12
+  },
+  "jobs": {
+    "enabled": true,
+    "maxLevel": 25,
+    "milestones": [],
+    "revealAt": 0.6,
+    "list": [
+      {
+        "id": "wifi",
+        "name": "Guess a neighbor's Wi-Fi password",
+        "time": 6,
+        "pay": 2,
+        "cost": 5,
+        "r": 1.2,
+        "rep": 3,
+        "unlock": 0,
+        "loot": [
+          "Neighbor's Netflix login",
+          "Their kid's Fortnite account",
+          "A folder called TAXES_FINAL_v7"
+        ]
+      },
+      {
+        "id": "stream",
+        "name": "Sell a cracked streaming account",
+        "time": 30,
+        "pay": 12,
+        "cost": 60,
+        "r": 1.2,
+        "rep": 9,
+        "unlock": 25,
+        "loot": [
+          "A password reused on a dating site",
+          "A watch history nobody should see"
+        ]
+      },
+      {
+        "id": "phone",
+        "name": "Recover a locked phone for cash",
+        "time": 300,
+        "pay": 150,
+        "cost": 1200,
+        "r": 1.2,
+        "rep": 30,
+        "unlock": 150,
+        "loot": [
+          "A photo of someone's winning lottery ticket",
+          "A crypto seed phrase saved in Notes"
+        ]
+      },
+      {
+        "id": "kebab",
+        "name": "Hack a kebab shop's loyalty app",
+        "time": 600,
+        "pay": 1200,
+        "cost": 15000,
+        "r": 1.2,
+        "rep": 90,
+        "unlock": 600,
+        "loot": [
+          "The secret garlic sauce recipe",
+          "The owner's 'cash only' spreadsheet"
+        ]
+      },
+      {
+        "id": "dentist",
+        "name": "Ransom a dentist's office PC",
+        "time": 1800,
+        "pay": 9000,
+        "cost": 150000,
+        "r": 1.2,
+        "rep": 300,
+        "unlock": 2000,
+        "loot": [
+          "A celebrity's dental records",
+          "An insurance claim with your name on it now"
+        ]
+      },
+      {
+        "id": "radio",
+        "name": "Crash a local radio station",
+        "time": 3600,
+        "pay": 40000,
+        "cost": 800000,
+        "r": 1.2,
+        "rep": 900,
+        "unlock": 6000,
+        "loot": [
+          "An unreleased demo from a local band",
+          "The DJ's blackmail folder"
+        ]
+      }
+    ],
+    "levelGain": 0.08
+  },
+  "rigs": {
+    "enabled": true,
+    "list": [
+      {
+        "job": "wifi",
+        "name": "Wi-Fi cracking script",
+        "cost": 1200
+      },
+      {
+        "job": "stream",
+        "name": "Account checker bot",
+        "cost": 6000
+      },
+      {
+        "job": "phone",
+        "name": "Phone unlock kit",
+        "cost": 25000
+      },
+      {
+        "job": "kebab",
+        "name": "Loyalty app exploit",
+        "cost": 120000
+      },
+      {
+        "job": "dentist",
+        "name": "Ransomware kit",
+        "cost": 600000
+      },
+      {
+        "job": "radio",
+        "name": "Transmitter hijack rig",
+        "cost": 2500000
+      }
+    ],
+    "speed": 0.5,
+    "slots": 6
+  },
+  "classes": {
+    "enabled": true,
+    "list": [
+      {
+        "id": "rack",
+        "name": "Rack unit",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Rack unit",
+            "cost": 60,
+            "value": 1,
+            "comfort": 0
+          }
+        ],
+        "slot": "tech"
+      },
+      {
+        "id": "gpu",
+        "name": "GPU rig",
+        "effect": "rigSpeed",
+        "tiers": [
+          {
+            "name": "Used GPU rig",
+            "cost": 1400,
+            "value": 1.2,
+            "comfort": 0
+          },
+          {
+            "name": "Mining rig",
+            "cost": 4500,
+            "value": 1.4,
+            "comfort": 0
+          },
+          {
+            "name": "Render box",
+            "cost": 9000,
+            "value": 1.6,
+            "comfort": 0
+          }
+        ],
+        "slot": "tech"
+      },
+      {
+        "id": "router",
+        "name": "Router",
+        "effect": "offlineCap",
+        "tiers": [
+          {
+            "name": "ISP box",
+            "cost": 40,
+            "value": 1.1,
+            "comfort": 0
+          },
+          {
+            "name": "Better router",
+            "cost": 150,
+            "value": 1.2,
+            "comfort": 0
+          },
+          {
+            "name": "Fiber line",
+            "cost": 500,
+            "value": 1.3,
+            "comfort": 0
+          }
+        ],
+        "requires": "rack"
+      },
+      {
+        "id": "storage",
+        "name": "Storage unit",
+        "effect": "lootChance",
+        "slot": "tech",
+        "tiers": [
+          {
+            "name": "Shelf of drives",
+            "cost": 600,
+            "value": 0.005,
+            "comfort": 0
+          },
+          {
+            "name": "Filing cabinet",
+            "cost": 2400,
+            "value": 0.01,
+            "comfort": 0
+          },
+          {
+            "name": "Storage wall",
+            "cost": 7000,
+            "value": 0.02,
+            "comfort": 0
+          }
+        ]
+      },
+      {
+        "id": "computer",
+        "name": "Computer",
+        "effect": "tapMoney",
+        "start": 1,
+        "tiers": [
+          {
+            "name": "Old laptop",
+            "cost": 1,
+            "value": 1,
+            "comfort": 0
+          },
+          {
+            "name": "Gaming PC",
+            "cost": 1400,
+            "value": 2,
+            "comfort": 0
+          },
+          {
+            "name": "Workstation",
+            "cost": 4500,
+            "value": 3,
+            "comfort": 0
+          }
+        ]
+      },
+      {
+        "id": "desk",
+        "name": "Desk",
+        "effect": "none",
+        "start": 1,
+        "tiers": [
+          {
+            "name": "Simple desk",
+            "cost": 1,
+            "value": 1,
+            "comfort": 1,
+            "slots": {
+              "small": 1
+            }
+          },
+          {
+            "name": "IKAE table",
+            "cost": 180,
+            "value": 1,
+            "comfort": 2.5,
+            "slots": {
+              "small": 2
+            }
+          },
+          {
+            "name": "Standing desk",
+            "cost": 700,
+            "value": 1,
+            "comfort": 5,
+            "slots": {
+              "small": 3
+            }
+          }
+        ]
+      },
+      {
+        "id": "chair",
+        "name": "Chair",
+        "effect": "none",
+        "start": 1,
+        "tiers": [
+          {
+            "name": "Kitchen chair",
+            "cost": 1,
+            "value": 1,
+            "comfort": 1
+          },
+          {
+            "name": "Office chair",
+            "cost": 220,
+            "value": 1,
+            "comfort": 2.5
+          },
+          {
+            "name": "Gaming chair",
+            "cost": 600,
+            "value": 1,
+            "comfort": 5
+          }
+        ]
+      },
+      {
+        "id": "osc",
+        "name": "Oscillator",
+        "effect": "pay",
+        "tiers": [
+          {
+            "name": "Oscillator",
+            "cost": 250,
+            "value": 1.15,
+            "comfort": 0
+          }
+        ],
+        "slot": "small"
+      },
+      {
+        "id": "lamp",
+        "name": "Lava lamp",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Lava lamp",
+            "cost": 30,
+            "value": 1,
+            "comfort": 1.5
+          }
+        ],
+        "event": {
+          "boost": 5,
+          "dur": 30
+        },
+        "slot": "small"
+      },
+      {
+        "id": "plant",
+        "name": "Plant",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Plant",
+            "cost": 40,
+            "value": 1,
+            "comfort": 1.5
+          }
+        ],
+        "event": {
+          "boost": 7.5,
+          "dur": 45
+        },
+        "slot": "small"
+      },
+      {
+        "id": "phones",
+        "name": "Headphones",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Headphones",
+            "cost": 200,
+            "value": 1,
+            "comfort": 2.5
+          }
+        ],
+        "event": {
+          "boost": 10,
+          "dur": 40
+        },
+        "slot": "small"
+      },
+      {
+        "id": "ramen",
+        "name": "Ramen bowl",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Ramen bowl",
+            "cost": 20,
+            "value": 1,
+            "comfort": 1
+          }
+        ],
+        "event": {
+          "boost": 5,
+          "dur": 20
+        },
+        "slot": "small"
+      },
+      {
+        "id": "shelf",
+        "name": "Bookshelf",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Bookshelf",
+            "cost": 500,
+            "value": 1,
+            "comfort": 5
+          }
+        ],
+        "slot": "comfort"
+      },
+      {
+        "id": "beanbag",
+        "name": "Bean bag",
+        "effect": "none",
+        "slot": "comfort",
+        "tiers": [
+          {
+            "name": "Bean bag",
+            "cost": 800,
+            "value": 1,
+            "comfort": 6
+          }
+        ],
+        "event": {
+          "boost": 12.5,
+          "dur": 30
+        }
+      },
+      {
+        "id": "cat",
+        "name": "Cat",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Cat",
+            "cost": 300,
+            "value": 1,
+            "comfort": 5
+          }
+        ],
+        "event": {
+          "boost": 10,
+          "dur": 30
+        }
+      },
+      {
+        "id": "gf",
+        "name": "Girlfriend",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Girlfriend",
+            "cost": 2500,
+            "value": 1,
+            "comfort": 10
+          }
+        ],
+        "event": {
+          "boost": 50,
+          "dur": 15
+        }
+      },
+      {
+        "id": "expand",
+        "name": "Room expansion",
+        "effect": "none",
+        "tiers": [
+          {
+            "name": "Knock the wall down",
+            "cost": 50000,
+            "value": 1,
+            "comfort": 0,
+            "slots": {
+              "tech": 1,
+              "comfort": 1
+            }
+          }
+        ]
+      }
+    ],
+    "slots": {
+      "tech": 2,
+      "comfort": 1
+    }
+  },
+  "events": {
+    "enabled": true,
+    "window": 20,
+    "first": 15,
+    "min": 60,
+    "max": 120,
+    "acceptRate": 0.7
+  },
+  "loot": {
+    "enabled": true,
+    "chance": 0,
+    "payRuns": 12
+  },
+  "offline": {
+    "enabled": true,
+    "capHours": 8
+  }
+}

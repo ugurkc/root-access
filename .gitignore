@@ -1,1 +1,4 @@
 .DS_Store
+
+# local handoff notes, not for the repo
+docs/unity-handoff-*.md

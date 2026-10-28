@@ -168,3 +168,53 @@ test('runsOf counts completed runs, active and offline', () => {
   assert.equal(runsOf(state, 'wifi'), 12);
   assert.equal(runsOf(state, 'stream'), 0);
 });
+
+test('jobs.levelGain scales what a level adds; absent it is pay × level', () => {
+  const gain = structuredClone(cfg); gain.jobs.levelGain = 0.25;
+  const s = fresh(gain); jobs.init(s, gain, active); s.jobs.byId.wifi.lv = 25;
+  assert.ok(Math.abs(payFor(s, gain, 'wifi', ctx1) - 2 * (1 + 0.25 * 24)) < 1e-9);
+  s.jobs.byId.wifi.lv = 1;
+  assert.equal(payFor(s, gain, 'wifi', ctx1), 2);
+  const plain = fresh(); jobs.init(plain, cfg, active); plain.jobs.byId.wifi.lv = 25;
+  assert.equal(payFor(plain, cfg, 'wifi', ctx1), 2 * 25);
+});
+
+test('rigs.speed slows rigged jobs only, active and offline', () => {
+  const state = { credits: 0, t: 0, config: base() }; state.config.rigs.speed = 0.5;
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv'); jobs.buy(state, 'job:stream:lv');
+  setRigged(state, 'wifi', 'Script');
+  const c = { ...ctx(), policy: { restartManualJobs: true } };
+  assert.equal(runRate(state, state.config, 'wifi', c), 2 / 6 * 0.5);
+  assert.equal(runRate(state, state.config, 'stream', c), 8 / 15);   // by hand: full speed
+  jobs.tick(state, 6, c);                     // wifi: 6 s × 0.5 = half a run; nothing pays yet
+  assert.equal(state.credits, 0);
+  jobs.tick(state, 6, c);
+  assert.equal(state.credits, 2);
+  state.credits = 0;
+  jobs.offline(state, 60, c);                 // 60 s × 0.5 / 6 = 5 wifi runs
+  assert.equal(state.credits, 10);
+});
+
+test('ctx.timeCut shortens every run but never under 1 s', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
+  const c = { ...ctx(), timeCut: 4, policy: {} };
+  assert.equal(runRate(state, state.config, 'wifi', c), 2 / 2);          // 6 s − 4 s
+  jobs.tick(state, 2, c);
+  assert.equal(state.credits, 2);
+  const floor = { ...c, timeCut: 100 };
+  assert.equal(runRate(state, state.config, 'wifi', floor), 2 / 1);
+  state.credits = 0;
+  jobs.offline(state, 10, floor);                                          // 10 runs of 1 s
+  assert.equal(state.credits, 20);
+});
+
+test('offlineMult stretches the offline cap: 8 h × 1.5 of a long absence earns', () => {
+  const state = { credits: 0, t: 0, config: base() };
+  jobs.init(state, state.config);
+  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
+  jobs.offline(state, 24 * 3600, { ...ctx(), offlineMult: 1.5 });        // 12 h of 6 s runs at 2 each
+  assert.equal(state.credits, 12 * 3600 / 6 * 2);
+});

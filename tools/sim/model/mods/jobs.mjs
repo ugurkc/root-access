@@ -33,21 +33,29 @@ export function costN(state, cfg, id, n) {
   return job.cost * r ** lv * series;
 }
 
-// Pay per run at level `lv`: pay × lv × 2^(milestones reached) × payMult × comfortMult.
+// Pay per run at level `lv`: pay × (1 + levelGain × (lv − 1)) × 2^(milestones reached) × payMult.
+// Comfort does not touch job pay; it scales tap money (taps.mjs) and through it the bar payout.
+// levelGain defaults to 1, the plain pay × lv.
+const levelMult = (cfg, lv) => 1 + (cfg.jobs.levelGain ?? 1) * (lv - 1);
 function payAt(cfg, job, lv, ctx) {
   const milestones = cfg.jobs.milestones.filter((m) => m <= lv).length;
-  return job.pay * lv * 2 ** milestones * ctx.payMult * ctx.comfortMult;
+  return job.pay * levelMult(cfg, lv) * 2 ** milestones * ctx.payMult;
 }
 
 export function payFor(state, cfg, id, ctx) {
   return payAt(cfg, jobCfg(state, id), state.jobs.byId[id].lv, ctx);
 }
 
-// Work seconds per real second: speedMult for every job, × rigSpeedMult for a rigged one.
-const workSpeed = (ctx, rigged) => ctx.speedMult * (rigged ? ctx.rigSpeedMult : 1);
+// Seconds of work a run takes: the job's time less ctx.timeCut (router), never under MIN_TIME
+// (or the job's own time when that is shorter).
+const MIN_TIME = 1;
+const runTime = (job, ctx) => Math.max(Math.min(MIN_TIME, job.time), job.time - ctx.timeCut);
+
+// Work seconds per real second: speedMult for every job; a rigged one runs at rigs.speed (default 1) × rigSpeedMult.
+const workSpeed = (cfg, ctx, rigged) => ctx.speedMult * (rigged ? (cfg.rigs.speed ?? 1) * ctx.rigSpeedMult : 1);
 
 // Credits per second of a job at level `lv` while it runs: pay / time × work speed.
-const rateAt = (cfg, job, lv, ctx, rigged) => payAt(cfg, job, lv, ctx) / job.time * workSpeed(ctx, rigged);
+const rateAt = (cfg, job, lv, ctx, rigged) => payAt(cfg, job, lv, ctx) / runTime(job, ctx) * workSpeed(cfg, ctx, rigged);
 
 export function runRate(state, cfg, id, ctx, asRigged = state.jobs.byId[id].rigged) {
   return rateAt(cfg, jobCfg(state, id), state.jobs.byId[id].lv, ctx, asRigged);
@@ -121,10 +129,11 @@ export const jobs = {
         j.work = 0;
       }
       if (!j.running) continue;
-      j.work += dt * workSpeed(ctx, j.rigged);
-      while (j.work >= job.time) {
+      j.work += dt * workSpeed(cfg, ctx, j.rigged);
+      const need = runTime(job, ctx);
+      while (j.work >= need) {
         finishRun(state, cfg, job, ctx);
-        j.work -= job.time;
+        j.work -= need;
         if (!j.rigged) {
           j.running = false;
           j.work = 0;
@@ -134,15 +143,15 @@ export const jobs = {
     }
   },
 
-  // While away only rigged jobs run, for at most `offline.capHours`, in whole runs.
+  // While away only rigged jobs run, for at most `offline.capHours` × offlineMult, in whole runs.
   offline(state, seconds, ctx) {
     const cfg = state.config;
-    const secs = Math.min(seconds, offlineCapSeconds(cfg));
+    const secs = Math.min(seconds, offlineCapSeconds(cfg, ctx));
     if (secs <= 0) return;
     for (const job of cfg.jobs.list) {
       const j = state.jobs.byId[job.id];
       if (j.lv === 0 || !j.rigged) continue;
-      const runs = Math.floor(secs * workSpeed(ctx, true) / job.time);
+      const runs = Math.floor(secs * workSpeed(cfg, ctx, true) / runTime(job, ctx));
       state.credits += runs * payFor(state, cfg, job.id, ctx);
       state.jobs.rep += runs * job.rep;
       j.runs += runs;

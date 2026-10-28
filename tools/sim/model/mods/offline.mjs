@@ -2,10 +2,11 @@
 // (rigged jobs, capped at `offline.capHours`); this module earns nothing and only records how
 // many gaps there were and how much of them the cap cut off.
 
-// Seconds of an absence that still earn: 0 when the offline block is off or missing.
-export function offlineCapSeconds(cfg) {
+// Seconds of an absence that still earn: capHours × ctx.offlineMult (the router); 0 when the offline
+// block is off or missing.
+export function offlineCapSeconds(cfg, ctx) {
   if (!cfg.offline || cfg.offline.enabled === false) return 0;
-  return cfg.offline.capHours * 3600;
+  return cfg.offline.capHours * 3600 * ctx.offlineMult;
 }
 
 export const offline = {
@@ -17,10 +18,10 @@ export const offline = {
 
   tick() {},
 
-  offline(state, seconds) {
+  offline(state, seconds, ctx) {
     const o = state.offline;
     o.gaps += 1;
-    const cap = offlineCapSeconds(state.config);
+    const cap = offlineCapSeconds(state.config, ctx);
     if (seconds > cap) {
       o.cappedCount += 1;
       o.cappedSeconds += seconds - cap;

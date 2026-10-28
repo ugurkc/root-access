@@ -2,7 +2,8 @@
 // The desk class scales the money (ctx.tapMult), the router the nudge (ctx.tapAdvanceMult).
 import { advanceRunning, runningIncome } from './jobs.mjs';
 
-// Credits per tap: max(minMoney, rate × income of the running jobs) × comfortMult × tapMult.
+// Credits per tap: max(minMoney, rate × income of the running jobs) × comfortMult × tapMult. Comfort
+// lives here (and in the bar payout, a multiple of this) and nowhere else.
 export function tapMoney(state, cfg, ctx) {
   const income = state.jobs ? runningIncome(state, cfg, ctx) : 0;
   return Math.max(cfg.taps.minMoney, cfg.taps.rate * income) * ctx.comfortMult * ctx.tapMult;

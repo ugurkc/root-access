@@ -1,5 +1,6 @@
 // Loot: a completed run drops a funny, cashable piece of information with probability
-// `loot.chance`, worth `loot.payRuns` runs of that job's pay at the moment of the drop. Modelled as
+// `loot.chance` + ctx.lootChance (storage units, classes.mjs), worth `loot.payRuns` runs of that job's
+// pay at the moment of the drop. Modelled as
 // the expectation, not the dice: every new run (read through jobs.mjs `runsOf`) adds
 // chance × payRuns × pay to a pending pool and `chance` to an expected drop count. The pool is cashed
 // by the loot step of the same tick (accrue, then claim: the player taps the card), so only loot
@@ -49,15 +50,16 @@ function accrue(state, ctx) {
   if (!state.jobs) return;
   const cfg = state.config;
   const l = state.loot;
+  const chance = cfg.loot.chance + ctx.lootChance;
   for (const job of cfg.jobs.list) {
     const runs = runsOf(state, job.id);
     const fresh = runs - l.seen[job.id];
     if (fresh <= 0) continue;
     l.seen[job.id] = runs;
-    const value = fresh * cfg.loot.chance * cfg.loot.payRuns * payFor(state, cfg, job.id, ctx);
+    const value = fresh * chance * cfg.loot.payRuns * payFor(state, cfg, job.id, ctx);
     l.pending += value;
     l.pendingBy[job.id] += value;
-    l.drops += fresh * cfg.loot.chance;
+    l.drops += fresh * chance;
   }
 }
 

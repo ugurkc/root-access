@@ -48,22 +48,23 @@ test('isRecordList: a list of records, and nothing else', () => {
 
 test('fieldsFor returns ordered descriptors: required keys first, then optional, with kind/options/min/max', () => {
   const fields = fieldsFor(CLASS);
-  assert.deepEqual(fields.map((f) => f.name), ['id', 'name', 'effect', 'tiers', 'event']);
-  assert.deepEqual(fields.map((f) => f.optional), [false, false, false, false, true]);
+  assert.deepEqual(fields.map((f) => f.name), ['id', 'name', 'effect', 'tiers', 'event', 'start', 'slot', 'requires']);
+  assert.deepEqual(fields.map((f) => f.optional), [false, false, false, false, true, true, true, true]);
   const byName = Object.fromEntries(fields.map((f) => [f.name, f]));
   assert.equal(byName.id.kind, 'str');
   assert.equal(byName.effect.kind, 'enum');
-  assert.deepEqual(byName.effect.options, ['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'rigSlots', 'none']);
+  assert.deepEqual(byName.effect.options, ['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'rigSlots', 'timeCut', 'offlineCap', 'lootChance', 'none']);
   assert.equal(byName.tiers.kind, 'list');
   assert.equal(kindOf(byName.tiers.shape.of), 'record');
   assert.equal(byName.event.kind, 'record');
 
   const tier = Object.fromEntries(fieldsFor(TIER).map((f) => [f.name, f]));
-  assert.deepEqual(Object.keys(tier), ['name', 'cost', 'value', 'comfort']);
+  assert.deepEqual(Object.keys(tier), ['name', 'cost', 'value', 'comfort', 'slots']);
+  assert.equal(tier.slots.optional, true);
   assert.equal(tier.cost.kind, 'pos');
   assert.equal(tier.cost.min, 0);
   assert.equal(tier.value.kind, 'atLeast');
-  assert.equal(tier.value.min, 1);
+  assert.equal(tier.value.min, 0);                       // the per-effect floor is the validator's
   assert.equal(tier.comfort.min, 0);
 
   const loot = Object.fromEntries(fieldsFor(SHAPES.loot).map((f) => [f.name, f]));
@@ -79,7 +80,7 @@ test('fieldsFor returns ordered descriptors: required keys first, then optional,
 
 test('columnsFor flattens nested records into dotted optional columns and keeps a list of records as one column', () => {
   const cols = columnsFor(CLASS);
-  assert.deepEqual(cols.map((c) => c.name), ['id', 'name', 'effect', 'tiers', 'event.boost', 'event.dur']);
+  assert.deepEqual(cols.map((c) => c.name), ['id', 'name', 'effect', 'tiers', 'event.boost', 'event.dur', 'start', 'slot', 'requires']);
   const boost = cols.find((c) => c.name === 'event.boost');
   assert.equal(boost.kind, 'atLeast');
   assert.equal(boost.optional, true);

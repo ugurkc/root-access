@@ -2,11 +2,13 @@
 // A shape is num | pos | atLeast(n) | nonNegInt | prob | bool | str | enumOf([...]) | list(shape) | record(required, optional).
 // `pos` is a finite number > 0: durations, prices and growth factors that would divide by or loop on zero.
 // `atLeast(n)` is a finite number ≥ n: multipliers (≥ 1) and amounts that may be zero but not negative.
-// `nonNegInt` is an integer ≥ 0: slot counts. No SHAPES entry uses it today; kept for future slot-count
-// fields (the editor still handles it).
+// `nonNegInt` is an integer ≥ 0: slot counts (`rigs.slots`, `classes.slots`, a tier's `slots`).
 // `prob` is a finite number in [0, 1]: chances rolled per run.
-// Blocks: schema, taps, bar, jobs, rigs, classes, events, loot, offline. Rig slots come from a class
-// with effect `rigSlots` (a purchasable rack), whose tier values are slot counts.
+// Blocks: schema, taps, bar, jobs, rigs, classes, events, loot, offline. Rig slots are `rigs.slots` plus
+// any class with effect `rigSlots` (a purchasable rack), whose tier values are slot counts.
+// Room slots: `classes.slots` is the room's base count per kind (tech, comfort, small); a class with a
+// `slot` kind takes one of them when its first tier is bought, and a tier's `slots` adds to the counts
+// while that tier is in force (a desk's tabletop spots, a room expansion).
 
 export const SCHEMA = 2;
 
@@ -21,6 +23,13 @@ export const enumOf = (values) => ({ kind: 'enum', values });
 export const list = (of) => ({ kind: 'list', of });
 export const record = (keys, optional = {}) => ({ kind: 'record', keys, optional });
 
+// Class effects. The multiplier effects' tier values are ≥ 1; `rigSlots` values are whole slot counts;
+// `lootChance` values are a loot drop chance per run (0…1), summed over the owned classes and added to
+// `loot.chance`; `none` does nothing beyond comfort (and slots).
+export const EFFECTS = ['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'rigSlots', 'timeCut', 'offlineCap', 'lootChance', 'none'];
+export const SLOT_KINDS = ['tech', 'comfort', 'small'];
+const SLOTS = record({}, Object.fromEntries(SLOT_KINDS.map((k) => [k, nonNegInt])));
+
 // Every block is required: a block switched off with `enabled: false` must still be complete.
 export const SHAPES = {
   schema: num,
@@ -32,16 +41,21 @@ export const SHAPES = {
       { id: str, name: str, time: pos, pay: pos, cost: pos, r: pos, rep: num, unlock: num },
       { loot: list(str) },
     )),
-  }),
-  rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) }),
+  }, { levelGain: atLeast(0) }),   // a level adds levelGain × base pay; absent = 1 (pay × level)
+  rigs: record({ enabled: bool, list: list(record({ job: str, name: str, cost: pos })) },
+    { speed: pos,                   // a rig runs its job at this fraction of hand speed; absent = 1
+      slots: nonNegInt }),          // rig slots the room has without a rack; absent = 0
   classes: record({
     enabled: bool,
     list: list(record(
-      { id: str, name: str, effect: enumOf(['pay', 'tapAdvance', 'rigSpeed', 'tapMoney', 'barBonus', 'rigSlots', 'none']),
-        tiers: list(record({ name: str, cost: pos, value: atLeast(1), comfort: atLeast(0) })) },
-      { event: record({ boost: atLeast(0), dur: atLeast(0) }) },
+      { id: str, name: str, effect: enumOf(EFFECTS),
+        tiers: list(record({ name: str, cost: pos, value: atLeast(0), comfort: atLeast(0) }, { slots: SLOTS })) },
+      { event: record({ boost: atLeast(0), dur: atLeast(0) }),
+        start: atLeast(0),             // tiers owned from the start (the first `start` tiers are never bought)
+        slot: enumOf(SLOT_KINDS),      // the room slot the class takes when first bought; absent = none
+        requires: str },               // a class id that must be owned before this one is offered
     )),
-  }),
+  }, { slots: SLOTS }),               // the room's base slot counts; absent = none of each kind
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
   loot: record({ enabled: bool, chance: prob, payRuns: atLeast(0) }),
   offline: record({ enabled: bool, capHours: pos }),
@@ -153,17 +167,47 @@ function checkClassTiers(cfg, errs) {
   });
 }
 
-// A `rigSlots` class adds its tier value to the rig slots, so the value must be a whole count.
-// Guarded per entry: anything that is not a record / array / number is already a shape error.
-function checkRigSlotTiers(cfg, errs) {
+// `start` is a tier index the player begins at, so it must be a whole number within the tiers.
+function checkClassStart(cfg, errs) {
   if (!Array.isArray(cfg.classes?.list)) return;
   cfg.classes.list.forEach((cls, i) => {
-    if (!isRecord(cls) || cls.effect !== 'rigSlots' || !Array.isArray(cls.tiers)) return;
+    if (!isRecord(cls) || typeof cls.start !== 'number' || !Array.isArray(cls.tiers)) return;
+    if (!(Number.isInteger(cls.start) && cls.start <= cls.tiers.length)) {
+      errs.push({ path: `classes.list[${i}].start`, message: `start must be an integer ≤ the number of tiers (${cls.tiers.length})` });
+    }
+  });
+}
+
+// A tier's `value` means something different per effect: a multiplier (≥ 1) for most, a whole rig
+// slot count (≥ 1) for `rigSlots`, a chance (≤ 1) for `lootChance`. The shape only keeps it ≥ 0.
+// Guarded per entry: anything that is not a record / array / number is already a shape error.
+function checkTierValues(cfg, errs) {
+  if (!Array.isArray(cfg.classes?.list)) return;
+  cfg.classes.list.forEach((cls, i) => {
+    if (!isRecord(cls) || !Array.isArray(cls.tiers)) return;
     cls.tiers.forEach((t, j) => {
-      if (isRecord(t) && typeof t.value === 'number' && !(Number.isInteger(t.value) && t.value >= 0)) {
-        errs.push({ path: `classes.list[${i}].tiers[${j}].value`, message: 'rig slot count must be an integer' });
+      if (!isRecord(t) || typeof t.value !== 'number' || !Number.isFinite(t.value)) return;
+      const path = `classes.list[${i}].tiers[${j}].value`;
+      if (cls.effect === 'lootChance') {
+        if (t.value > 1) errs.push({ path, message: `expected number between 0 and 1, got ${t.value}` });
+      } else if (t.value < 1) {
+        errs.push({ path, message: `expected number ≥ 1, got ${t.value}` });
+      } else if (cls.effect === 'rigSlots' && !Number.isInteger(t.value)) {
+        errs.push({ path, message: 'rig slot count must be an integer' });
       }
     });
+  });
+}
+
+// `requires` names another class; a class cannot require itself.
+function checkClassRequires(cfg, errs) {
+  if (!Array.isArray(cfg.classes?.list)) return;
+  const ids = new Set(cfg.classes.list.map((cls) => cls?.id));
+  cfg.classes.list.forEach((cls, i) => {
+    if (!isRecord(cls) || typeof cls.requires !== 'string') return;
+    if (!ids.has(cls.requires) || cls.requires === cls.id) {
+      errs.push({ path: `classes.list[${i}].requires`, message: `unknown class id ${JSON.stringify(cls.requires)}` });
+    }
   });
 }
 
@@ -177,6 +221,8 @@ export function validateConfig(cfg) {
   checkRigJobs(cfg, errs);
   checkEventsInterval(cfg, errs);
   checkClassTiers(cfg, errs);
-  checkRigSlotTiers(cfg, errs);
+  checkTierValues(cfg, errs);
+  checkClassStart(cfg, errs);
+  checkClassRequires(cfg, errs);
   return errs;
 }

@@ -41,15 +41,28 @@ from `presets/starter-2026-10-28.json` (one job, one rig, three of the eight cla
 
 Rules the blocks encode:
 
-- **Classes.** A class owns one room spot and is bought once, then upgraded tier by tier; tier 0 is
-  "not owned" and the tier in force is `tiers[tier − 1]`. `effect` is one of `pay`, `tapAdvance`,
-  `rigSpeed`, `tapMoney`, `barBonus`, `rigSlots`, `none` and says what the tier's `value` multiplies
-  (`value` ≥ 1), except for `rigSlots`, where `value` is a whole count of rig slots. Each tier's
+- **Jobs.** A level pays `pay × (1 + levelGain × (lv − 1))`; `jobs.levelGain` absent means 1 (pay × level).
+  A rigged job runs at `rigs.speed` × hand speed (absent = 1), active and offline alike.
+- **Classes.** A class is bought once, then upgraded tier by tier; tier 0 is "not owned" and the tier
+  in force is `tiers[tier − 1]`. `effect` is one of `pay`, `tapAdvance`, `rigSpeed`, `tapMoney`,
+  `barBonus`, `offlineCap` (multiplies the hours an absence keeps earning), `rigSlots`, `timeCut`,
+  `lootChance`, `none` and says what the tier's `value` multiplies (`value` ≥ 1), except for `rigSlots`,
+  where `value` is a whole count of rig slots, `timeCut`, where it is seconds taken off every job's run
+  time (summed over the owned classes, never below 1 s), and `lootChance`, where it is a drop chance per
+  run (0…1, summed and added to `loot.chance`). Each tier's
   `comfort` (≥ 0) adds to the room's permanent comfort. An optional per-class `event { boost, dur }`
   is averaged, not rolled: it adds `boost × dur × acceptRate / meanInterval` comfort while the class
-  is owned, with `meanInterval = (events.min + events.max) / 2`.
-- **Rack.** A rig needs a free rig slot and only a `rigSlots` class provides them (the preset's
-  `rack`: one tier, 3 slots). With the classes block off, no rig can ever be bought.
+  is owned, with `meanInterval = (events.min + events.max) / 2`. A class with `start: n` begins at
+  tier n, owned without a purchase (the starter desk, chair and computer).
+- **Room slots.** `classes.slots { tech, comfort, small }` is the room's base slot count per kind. A class
+  with a `slot` kind takes one when its first tier is bought and is offered only while one is free; its
+  later tiers need no slot. A tier's own `slots { kind: n }` adds to the counts while that tier is in
+  force (a desk's tabletop spots, a one-off room expansion). A class with `requires: "<id>"` is offered
+  only once that class is owned (the router on the rack's shelf). The shop values a slot-adding tier at
+  its comfort plus the best blocked class's gain × tier cost / (tier cost + that class's cost), the
+  bundle's worth per credit. Without these keys nothing is gated.
+- **Rigs.** A rig needs a free rig slot: `rigs.slots` (the room's own, absent = 0) plus what a
+  `rigSlots` class provides. With neither, no rig can ever be bought.
 - **Loot.** Every completed run (active or offline) adds the expectation `chance × payRuns × pay at
   drop time` to a pending pool and `chance` to an expected drop count. The pool is cashed by the loot step
   of the same tick (accrue, then claim: the player taps the card), so only loot from a gap waits, until
@@ -61,9 +74,11 @@ Rules the blocks encode:
 - **Loot texts.** A job may carry `loot: [texts]`; the game shows them, the sim ignores them.
 
 `validateConfig(cfg)` returns `[{ path, message }]`: unknown or missing keys, wrong types, NaN,
-non-positive costs and durations, bad enums, `value` below 1, `prob` outside `[0, 1]`, duplicate job
-or class ids, a rig whose `job` is not a job id, `events.min + max <= 0`, a class with no tiers, a
-`rigSlots` tier whose `value` is not an integer. Every CLI command refuses an invalid config before
+non-positive costs and durations, bad enums, a tier `value` below 1 (or above 1 for `lootChance`),
+`prob` outside `[0, 1]`, duplicate job or class ids, a rig whose `job` is not a job id,
+`events.min + max <= 0`, a class with no tiers, a `rigSlots` tier whose `value` is not an integer, a
+`start` past the class's tiers, a `requires` that names no other class, a slot count that is not a
+whole number. Every CLI command refuses an invalid config before
 running.
 
 ### Profile (`profiles/<id>.json`, resolved by id or path)
@@ -137,15 +152,15 @@ tapAdvanceMult`, the product of every module's `multipliers()`, rebuilt each tic
 |---|---|---|
 | `speedMult` | bar (active boosts) | jobs: work speed of every job |
 | `payMult` | classes (`pay`) | jobs: pay per run |
-| `comfortMult` | classes: `1 + roomComfort / 100` | jobs: pay per run; taps: money per tap |
+| `comfortMult` | classes: `1 + roomComfort / 100` | taps: money per tap (and so the bar payout) |
 | `rigSpeedMult` | classes (`rigSpeed`) | jobs: work speed of rigged jobs only |
 | `tapMult` | classes (`tapMoney`) | taps: money per tap |
 | `tapAdvanceMult` | classes (`tapAdvance`) | taps: job work pushed per tap |
 | `barMult` | classes (`barBonus`) | bar: the full-bar payout |
 
-Comfort multiplies job pay and tap money. A tap pays `max(minMoney, rate × running income) × comfortMult
-× tapMult`, and running income already carries `comfortMult`, so taps lean on comfort twice; the bar
-payout is `bonusTaps × barMult × tap money`, so it inherits both.
+Comfort multiplies tap money only, never job pay: a tap pays `max(minMoney, rate × running income) ×
+comfortMult × tapMult`, and the bar payout is `bonusTaps × barMult × tap money`, so it inherits comfort
+through the tap. Scripts and hand-run jobs earn the same with an empty room or a full one.
 
 **Metrics** (`metrics(state, ctx)` of each module, merged; the core adds the last group):
 
@@ -155,7 +170,8 @@ payout is `bonusTaps × barMult × tap money`, so it inherits both.
   `rep`, `jobs.<id>.level`, `jobs.<id>.rigged` (0/1)
 - rigs: `rigs.count`, `slots.rigFree`
 - classes: `classes.owned`, `classes.tiers` (owned tiers summed), `classes.<id>.tier`, `comfort.total`
-  (owned tiers' comfort, events excluded), `slots.rig`
+  (owned tiers' comfort, events excluded), `slots.rig`, `slots.<kind>` / `slots.<kind>Free` for tech,
+  comfort and small
 - events: `events.comfortAvg`
 - loot: `loot.pending`, `loot.earned` (the authoritative total; claims below a whole drop record no
   event), `loot.drops` (expected cards, a float)

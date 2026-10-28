@@ -49,6 +49,6 @@ export const base = () => ({
 
 // A neutral ctx: every multiplier 1, no taps this tick, t = 0, no policy, events dropped.
 export const ctx = () => ({
-  payMult: 1, speedMult: 1, comfortMult: 1, rigSpeedMult: 1, tapMult: 1, barMult: 1, tapAdvanceMult: 1,
+  payMult: 1, speedMult: 1, comfortMult: 1, rigSpeedMult: 1, tapMult: 1, barMult: 1, tapAdvanceMult: 1, offlineMult: 1, timeCut: 0, lootChance: 0,
   tapsThisTick: 0, t: 0, tps: 0, policy: {}, record() {},
 });

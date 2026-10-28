@@ -1,6 +1,6 @@
 // Rigs: one per job, bought once, automate the job (it loops by itself and runs while away).
-// A rig needs a free rig slot; the rack class provides them (classes.mjs `rigSlots`). A slot holds
-// nothing but a rig, so free slots are rigSlots − rigs bought. The module goes through jobs.mjs's
+// A rig needs a free rig slot: `rigs.slots` (the room's own, default 0) plus what a rack class
+// provides (classes.mjs `rigSlots`). A slot holds nothing but a rig, so free slots are slots − rigs bought. The module goes through jobs.mjs's
 // `levelOf` / `isRigged` / `setRigged` / `runRate` and never reads `state.jobs` itself.
 import { levelOf, isRigged, setRigged, runRate } from './jobs.mjs';
 import { rigSlots } from './classes.mjs';
@@ -11,8 +11,8 @@ const jobIdOf = (offerId) => offerId.slice(OFFER_PREFIX.length);
 
 const rigFor = (cfg, jobId) => cfg.rigs.list.find((r) => r.job === jobId);
 
-// 0 when the classes block is off (rigSlots is 0 then and no rig can be bought).
-const freeRigSlot = (state) => rigSlots(state) - state.rigs.count;
+// With no `rigs.slots` and the classes block off, 0: no rig can be bought.
+const freeRigSlot = (state) => (state.config.rigs.slots ?? 0) + rigSlots(state) - state.rigs.count;
 
 export const rigs = {
   id: 'rigs',

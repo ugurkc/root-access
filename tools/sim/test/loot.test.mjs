@@ -122,3 +122,15 @@ test('a full run earns loot, times its first drop, and keeps loot events out of 
   assert.equal(m.purchasesPerDay.reduce((a, b) => a + b, 0) + lootEvents.length, nonOffline);
   assert.equal(m['shop.capHits'], 0);
 });
+
+test('ctx.lootChance adds to loot.chance: a storage unit on a config with no loot of its own', () => {
+  const state = setup();
+  state.config.loot.chance = 0;
+  const c = ctx();
+  jobs.tick(state, 6, c); loot.tick(state, 1, c);
+  close(loot.metrics(state)['loot.earned'], 0);
+  const stored = { ...ctx(), lootChance: 0.04 };
+  jobs.tick(state, 6, stored); loot.tick(state, 1, stored);
+  close(loot.metrics(state)['loot.earned'], 0.04 * 25 * 2);
+  close(loot.metrics(state)['loot.drops'], 0.04);
+});

@@ -85,7 +85,7 @@ test('tier value is at least 1 and comfort at least 0', () => {
     c.classes.list[DESK].tiers[0].value = 0.9;
     c.classes.list[DESK].tiers[0].comfort = -1;
   }).map((e) => e.path);
-  assert.deepEqual(paths, [`classes.list[${DESK}].tiers[0].value`, `classes.list[${DESK}].tiers[0].comfort`]);
+  assert.deepEqual(paths.sort(), [`classes.list[${DESK}].tiers[0].comfort`, `classes.list[${DESK}].tiers[0].value`]);
 });
 
 test('a zero tier cost is reported: it is a price', () => {
@@ -142,4 +142,38 @@ test('a zero job time is reported: times, costs and growth must be positive', ()
 test('events.min + max must be positive: the mean interval divides', () => {
   reportsAt(broken((c) => { c.events.min = 0; c.events.max = 0; }), 'events.min');
   assert.deepEqual(broken((c) => { c.events.min = 0; c.events.max = 10; }), []);
+});
+
+test('class start must be an integer within the tiers; timeCut is a valid effect', () => {
+  const cfg = base();
+  cfg.classes.list[0].start = 1;
+  assert.deepEqual(validateConfig(cfg), []);
+  cfg.classes.list[0].start = cfg.classes.list[0].tiers.length + 1;
+  assert.ok(validateConfig(cfg).some((e) => e.path === 'classes.list[0].start'));
+  cfg.classes.list[0].start = 0.5;
+  assert.ok(validateConfig(cfg).some((e) => e.path === 'classes.list[0].start'));
+  delete cfg.classes.list[0].start;
+  cfg.classes.list[0].effect = 'timeCut';
+  assert.deepEqual(validateConfig(cfg), []);
+});
+
+test('a lootChance tier value is a chance (≤ 1), while other effects keep the ≥ 1 floor', () => {
+  const storage = { id: 'storage', name: 'Storage', effect: 'lootChance', tiers: [{ name: 'Shelf', cost: 600, value: 0.01, comfort: 0 }] };
+  assert.deepEqual(broken((c) => { c.classes.list.push(storage); }), []);
+  const i = base().classes.list.length;
+  assert.deepEqual(broken((c) => { c.classes.list.push({ ...storage, tiers: [{ ...storage.tiers[0], value: 1.5 }] }); }),
+    [{ path: `classes.list[${i}].tiers[0].value`, message: 'expected number between 0 and 1, got 1.5' }]);
+});
+
+test('slot kinds, base slot counts, tier slots and requires are validated', () => {
+  assert.deepEqual(broken((c) => { c.classes.slots = { tech: 2, comfort: 1 }; c.classes.list[CAT].slot = 'comfort'; c.classes.list[CAT].requires = 'desk'; c.classes.list[DESK].tiers[0].slots = { small: 1 }; }), []);
+  reportsAt(broken((c) => { c.classes.list[CAT].slot = 'wall'; }), `classes.list[${CAT}].slot`);
+  reportsAt(broken((c) => { c.classes.slots = { tech: 1.5 }; }), 'classes.slots.tech');
+  reportsAt(broken((c) => { c.classes.slots = { big: 1 }; }), 'classes.slots.big');
+  reportsAt(broken((c) => { c.classes.list[DESK].tiers[0].slots = { small: -1 }; }), `classes.list[${DESK}].tiers[0].slots.small`);
+  assert.deepEqual(broken((c) => { c.classes.list[CAT].requires = 'sofa'; }),
+    [{ path: `classes.list[${CAT}].requires`, message: 'unknown class id "sofa"' }]);
+  reportsAt(broken((c) => { c.classes.list[CAT].requires = 'cat'; }), `classes.list[${CAT}].requires`);
+  assert.deepEqual(broken((c) => { c.rigs.slots = 6; }), []);
+  reportsAt(broken((c) => { c.rigs.slots = 2.5; }), 'rigs.slots');
 });

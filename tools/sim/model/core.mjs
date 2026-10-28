@@ -113,7 +113,10 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   return { summary, timeline, metrics, final: { credits: state.credits, state } };
 }
 
-const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult', 'rigSpeedMult', 'tapMult', 'barMult', 'tapAdvanceMult'];
+const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult', 'rigSpeedMult', 'tapMult', 'barMult', 'tapAdvanceMult', 'offlineMult'];
+// Additive keys: summed across modules, default 0. timeCut is seconds taken off every job's run time;
+// lootChance is added to loot.chance (storage units).
+const ADD_KEYS = ['timeCut', 'lootChance'];
 
 // Multipliers of all modules multiplied together (default 1), plus tick bookkeeping, the policy,
 // the session's taps per second (`tps`, 0 while offline and in the final metrics ctx) and
@@ -124,6 +127,7 @@ const MULT_KEYS = ['payMult', 'speedMult', 'comfortMult', 'rigSpeedMult', 'tapMu
 function buildCtx(state, mods, profile, tapsThisTick, tps, record) {
   const ctx = {
     ...Object.fromEntries(MULT_KEYS.map((k) => [k, 1])),
+    ...Object.fromEntries(ADD_KEYS.map((k) => [k, 0])),
     tapsThisTick, t: state.t, policy: profile.policy, tps,
     record: (event) => record({ ...event, t: state.t, day: state.day }),
   };
@@ -134,6 +138,11 @@ function buildCtx(state, mods, profile, tapsThisTick, tps, record) {
       const v = k[key] ?? 1;
       if (!Number.isFinite(v)) throw new Error(`module ${m.id}: multipliers().${key} is ${v}`);
       ctx[key] *= v;
+    }
+    for (const key of ADD_KEYS) {
+      const v = k[key] ?? 0;
+      if (!Number.isFinite(v)) throw new Error(`module ${m.id}: multipliers().${key} is ${v}`);
+      ctx[key] += v;
     }
   }
   return ctx;

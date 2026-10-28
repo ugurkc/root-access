@@ -53,3 +53,15 @@ test('a rig offer values the job as rigged: gainPerSec scales with rigSpeedMult'
   const gain = (c) => rigs.offers(state, c).find((o) => o.id === 'rig:wifi').gainPerSec;
   assert.equal(gain({ ...ctx(), rigSpeedMult: 2 }), 2 * gain(ctx()));
 });
+
+test('rigs.slots are the room\'s own rig slots, available with no rack and added to a rack\'s', () => {
+  const state = setup();
+  state.config.rigs.slots = 1;
+  jobs.buy(state, 'job:wifi:lv');
+  const [offer] = rigs.offers(state, ctx());
+  assert.equal(offer.id, 'rig:wifi');
+  rigs.buy(state, offer.id);
+  assert.deepEqual(rigs.metrics(state), { 'rigs.count': 1, 'slots.rigFree': 0 });
+  classes.buy(state, 'class:rack');
+  assert.equal(rigs.metrics(state)['slots.rigFree'], 3);
+});
