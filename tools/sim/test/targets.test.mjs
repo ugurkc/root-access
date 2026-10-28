@@ -177,11 +177,13 @@ test('seven-day-idle targets against the default preset: all pass except the bas
   const verdicts = evaluate(load('../targets/seven-day-idle.json'), byProfile);
   assert.equal(verdicts.length, 12);
   const failed = verdicts.filter((v) => !v.pass).map((v) => `${v.id}/${v.profile}`);
-  assert.deepEqual(failed, ['daily-rig-or-item/active', 'daily-rig-or-item/casual']);
+  // Accepted room preset, 2026-10-28: the room is finished by day 2 (active) or day 5 (casual) by
+  // design, so a room item every day fails; the Storage unit comes late, so does the first loot.
+  assert.deepEqual(failed, ['daily-rig-or-item/active', 'daily-rig-or-item/casual', 'first-loot/active', 'first-loot/casual']);
   for (const v of verdicts) assert.equal(v.error, undefined, `${v.id}/${v.profile}: ${v.error}`);
   const byKey = Object.fromEntries(verdicts.map((v) => [`${v.id}/${v.profile}`, v.actual]));
   assert.ok(byKey['d7-not-done/active'] >= 1 && byKey['d7-not-done/casual'] >= 1);
-  assert.ok(byKey['first-rig/active'] <= 480 && byKey['first-rig/casual'] <= 480);
+  assert.ok(byKey['first-rig/active'] === 1 && byKey['first-rig/casual'] === 1);
   assert.ok(byKey['daily-purchase/active'] >= 1 && byKey['daily-purchase/casual'] >= 1);
-  assert.ok(byKey['first-loot/active'] <= 600 && byKey['first-loot/casual'] <= 600);
+  assert.ok(byKey['first-loot/active'] > 600 && byKey['first-loot/casual'] > 600);
 });

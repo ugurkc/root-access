@@ -1,4 +1,4 @@
 {
-  "presets": ["starter-2026-10-28.json"],
+  "presets": ["starter-room-2026-10-28.json", "starter-2026-10-28.json"],
   "profiles": ["active.json", "casual.json"]
 }

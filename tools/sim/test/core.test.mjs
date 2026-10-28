@@ -236,3 +236,14 @@ test("ctx.record stamps the core's t and day over any the module passes", () => 
   assert.equal(ev.t, 10);
   assert.equal(ev.day, 1);
 });
+
+test('firstDay:<kind> is the day the first event of that kind landed, alongside firstEvent', () => {
+  let n = 0;
+  const m = { id: 'm', init: () => {},
+    tick: (s, dt, ctx) => { if (s.day === 2 && n++ === 0) ctx.record({ kind: 'loot', id: 'loot:x' }); },
+    offers: () => [], buy: () => {}, metrics: () => ({}) };
+  const r = run({ config: minimalConfig(), profile: active, days: 3, modules: [m] });
+  assert.equal(r.metrics['firstDay:loot'], 2);
+  assert.equal(r.metrics['firstEvent:loot'], 12 * 60, 'the first tick after the 12 min of day 1');
+  assert.equal(r.metrics['firstDay:offline'], undefined);
+});

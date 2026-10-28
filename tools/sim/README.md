@@ -43,6 +43,11 @@ Rules the blocks encode:
 
 - **Jobs.** A level pays `pay × (1 + levelGain × (lv − 1))`; `jobs.levelGain` absent means 1 (pay × level).
   A rigged job runs at `rigs.speed` × hand speed (absent = 1), active and offline alike.
+- **Away.** An absence earns for at most `offline.capHours` × the router's multiplier. A rigged job
+  loops in whole runs, and the unfinished part of a run, including progress made before leaving,
+  carries into the next session. A hand-started run in progress keeps going at hand speed, pays once
+  if it finishes and then stops; `offline.handRuns: "pause"` (optional, default `"finish"`) freezes
+  it instead. A hand job that was not running earns nothing.
 - **Classes.** A class is bought once, then upgraded tier by tier; tier 0 is "not owned" and the tier
   in force is `tiers[tier − 1]`. `effect` is one of `pay`, `tapAdvance`, `rigSpeed`, `tapMoney`,
   `barBonus`, `offlineCap` (multiplies the hours an absence keeps earning), `rigSlots`, `timeCut`,
@@ -60,7 +65,12 @@ Rules the blocks encode:
   force (a desk's tabletop spots, a one-off room expansion). A class with `requires: "<id>"` is offered
   only once that class is owned (the router on the rack's shelf). The shop values a slot-adding tier at
   its comfort plus the best blocked class's gain × tier cost / (tier cost + that class's cost), the
-  bundle's worth per credit. Without these keys nothing is gated.
+  bundle's worth per credit, and a class that others require the same way for its best dependent (the
+  rack carries a share of the router). Items are never removed, so the shop holds the last free slot of
+  a kind for the class that would gain most from it: a first tier that would fill it is not offered
+  while a better unowned class of that kind could take it (`buy` itself does not enforce this). The
+  room records one `roomComplete` event the first tick nothing is left to place or upgrade. Without
+  these keys nothing is gated.
 - **Rigs.** A rig needs a free rig slot: `rigs.slots` (the room's own, absent = 0) plus what a
   `rigSlots` class provides. With neither, no rig can ever be bought.
 - **Loot.** Every completed run (active or offline) adds the expectation `chance × payRuns × pay at
@@ -104,6 +114,7 @@ applies to `purchasesPerDay` metrics. Metric grammar (`model/targets.mjs`):
 | metric | reads |
 |---|---|
 | `firstEvent:rig`, `firstEvent:loot`, `offersLeft.final`, `rigs.count`, `jobs.wifi.level`, … | any key of the run's `metrics` |
+| `firstDay:rig`, `firstDay:roomComplete`, … | the day the first event of that kind landed on; `no value` if it never did |
 | `purchasesPerDay:min\|max\|sum` | over per-day purchase counts, restricted to `days` |
 | `purchasesPerDay[rig,class,tier]:min` | same, counting only the listed kinds (`level class tier rig`) |
 | `summary.incomePassive:day7` | field `incomePassive` of day 7's summary row |
@@ -171,12 +182,12 @@ through the tap. Scripts and hand-run jobs earn the same with an empty room or a
 - rigs: `rigs.count`, `slots.rigFree`
 - classes: `classes.owned`, `classes.tiers` (owned tiers summed), `classes.<id>.tier`, `comfort.total`
   (owned tiers' comfort, events excluded), `slots.rig`, `slots.<kind>` / `slots.<kind>Free` for tech,
-  comfort and small
+  comfort and small, `room.complete` (0/1)
 - events: `events.comfortAvg`
 - loot: `loot.pending`, `loot.earned` (the authoritative total; claims below a whole drop record no
   event), `loot.drops` (expected cards, a float)
 - offline: `offline.gaps`, `offline.cappedCount`, `offline.cappedSeconds`
-- core: `firstEvent:<kind>`, `purchasesPerDay`, `purchasesByKindPerDay`, `credits.final`,
+- core: `firstEvent:<kind>` (active seconds), `firstDay:<kind>` (day), `purchasesPerDay`, `purchasesByKindPerDay`, `credits.final`,
   `offersLeft.final`, `shop.capHits`
 
 ## UI
@@ -250,6 +261,37 @@ aborts with exit 1 (`invalid config at rigs.list[wifi].cost=0: rigs.list[0].cost
 number, got 0`). `--json` gives
 `[{ values, passes, total, metrics: { <profile>: { "firstEvent:rig", "rigs.count", "credits.final", "offersLeft.final" } } }]`.
 
+`stress` runs each profile as profiled and under five perturbations, so a balance claim does not rest
+on one scripted player: taps at 60% of the profile rate, a first session 1 min shorter, every session
+25% shorter, a player who never saves up for a big purchase, and the last session of each later day
+dropped (skipped for a profile with one daily session). One row per profile and variant; `vs base` is
+the change in money earned over the run against the unperturbed row. Treat any balance change smaller
+than the spread between variants as noise. `--json` gives
+`[{ profile, variant, label, earned, deltaPct, metrics, passes, total }]`.
+
+```
+$ node tools/sim/cli.mjs stress --config tools/sim/presets/starter-room-2026-10-28.json --targets tools/sim/targets/seven-day-idle.json
+profile         variant  earned  vs base  first script  room done  first loot  passive $/s  pass
+ active            base   6.12M               251 s d1         d2      1323 s           27   4/6
+ active       slow-taps   4.46M     -27%      425 s d1         d3      2145 s           12   4/6
+ active     short-first   5.48M     -10%      251 s d1         d2      1264 s           27   4/6
+ active  short-sessions   4.82M     -21%      251 s d1         d2      1026 s           15   4/6
+ active       impulsive   4.45M     -27%     1024 s d2         d3      1094 s           14   3/6
+ active    fewer-visits   2.60M     -57%      251 s d1         d3      1325 s           14   4/6
+ casual            base   1.16M               425 s d1         d5      1541 s           10   4/6
+ casual       slow-taps    766K     -34%      644 s d2         d6      1884 s          8.5   4/6
+ casual     short-first    802K     -31%      421 s d2         d6      1778 s           10   4/6
+ casual  short-sessions    777K     -33%      420 s d2         d6      1423 s          8.5   4/6
+ casual       impulsive    146K     -87%     1607 s d5          -      1571 s          3.5   4/6
+
+          base  as profiled
+     slow-taps  taps at 60% of the profile rate
+   short-first  first session 1 min shorter
+short-sessions  every session 25% shorter
+     impulsive  never saves up for a big purchase
+  fewer-visits  last session of each later day dropped
+```
+
 ```
 $ node tools/sim/cli.mjs convert --to js --in tools/sim/presets/starter-2026-10-28.json --out /tmp/config.js
 wrote /tmp/config.js
@@ -307,17 +349,19 @@ verdicts describe the intent, not the old one. The pacing fixture and the integr
 default preset, the first entry in `ui/manifest.json` (read through `test/default-preset.mjs`), so
 moving the default is one manifest edit followed by `UPDATE_FIXTURE=1 npm test`.
 
-## Baseline findings on `starter-2026-10-28.json`
+## Baseline findings on `starter-room-2026-10-28.json`
 
-Draft numbers, recorded in `test/fixtures/README.md`. Both profiles buy the whole room on day 1: the
-active player places the rack at 24 s, the Wi-Fi rig at 29.2 s and the third rig at 124 s, and owns
-every class at its last tier by 112 s; casual has the rack at 27.3 s, the Wi-Fi rig at 38 s and the room
-complete at 180 s. The rack holds three rigs, so the kebab, dentist and radio rigs are never offered and
-passive income plateaus (about $1.09K/s active, $931/s casual) from day 2; the rest of the week is job
-levels. 10 of 12 verdicts pass (`first-upgrade`, `first-rig`, `daily-purchase`, `d7-not-done`,
-`first-loot` for both); `daily-rig-or-item` fails for both with actual 0 on days 2–6, because
-everything big is bought on day 1. Active play dominates: loot pays the active player about $79.5M
-over the week and credits reach tens of millions by day 7 (about $23.8M, down from $34.4M on day 6 as
-radio levels cost tens of millions each); casual ends at about $329K. That is a fact about the draft
-numbers, not a tool bug; the next step is tuning (the plan's Task 10 sweeps `loot.chance`, the tower
-and rack tiers, `rigs.list[kebab].cost` and `jobs.list[radio].pay`).
+The accepted starter room (recorded in `test/fixtures/README.md`). The active player owns the whole room
+on day 2 and earns $6.12M over the week; the casual player finishes it on day 5 and earns $1.16M.
+Both script the first four jobs (wifi on day 1); the active player also scripts the dentist on day 6.
+69% (active) and 81% (casual) of all money is earned while away. 8 of 12 verdicts pass:
+`daily-rig-or-item` fails for both because the room is finished early by design, and `first-loot`
+fails for both (first card at 22 and 26 min of play) because the Storage unit comes late.
+
+The `stress` table above is the honest error bar. A shorter first session or slower taps cost the
+casual player about a third of the week, because the $1,200 Wi-Fi script then slips to day 2 and
+nothing earns overnight; a player who never saves up loses 87%. Single runs also move by about ±6%
+under small, unrelated changes because the shop's purchase order shifts, so compare variants with
+`stress`, not one run.
+
+Findings on the earlier draft preset `starter-2026-10-28.json` are in git history.

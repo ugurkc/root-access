@@ -315,3 +315,92 @@ test('a tier that adds slots earns the best blocked class\'s gain, scaled to its
   close(gain(full, 'desk'), deskAlone + plantAlone * 180 / (180 + 40));
   assert.equal(gain(spare, 'desk'), deskAlone, 'with a spot free the desk earns its comfort alone');
 });
+
+// The room with an oscillator-like pay class competing for the desk's tabletop spots, the Wi-Fi job
+// running at level 10 and taps going, so pay and comfort both have a positive gain.
+const contested = () => {
+  const c = { ...ctx(), tps: 2, policy: { restartManualJobs: true } };
+  const state = roomed();
+  state.config.classes.list.push({ id: 'osc', name: 'Oscillator', effect: 'pay', slot: 'small', tiers: [{ name: 'Osc', cost: 250, value: 1.15, comfort: 0 }] });
+  classes.init(state, state.config); jobs.init(state, state.config); taps.init(state, state.config);
+  for (let i = 0; i < 10; i++) jobs.buy(state, 'job:wifi:lv');
+  jobs.tick(state, 0, c);
+  const gain = (id) => classes.offers(state, c).find((o) => o.id === `class:${id}`)?.gainPerSec;
+  return { state, c, gain };
+};
+
+test('the last free slot of a kind is held for the class that would gain the most from it', () => {
+  const { state, c, gain } = contested();
+  assert.equal(roomSlots(state).small.cap - roomSlots(state).small.used, 1);
+  assert.ok(gain('osc') > 0);
+  assert.equal(gain('lamp'), undefined, 'the lamp would take the last spot from the better oscillator');
+  assert.equal(gain('plant'), undefined);
+  classes.buy(state, 'class:desk');                                          // desk L2: two spots
+  assert.ok(gain('lamp') > 0, 'with two spots free the lamp can take one');
+  classes.buy(state, 'class:lamp');
+  assert.equal(gain('plant'), undefined, 'one spot left again: held for the oscillator');
+  classes.buy(state, 'class:osc');
+  assert.ok(classes.offers(state, c).every((o) => o.id !== 'class:plant'), 'the room is full');
+});
+
+test('a held-back class can still be bought directly; holding is the shop\'s judgment, not a rule', () => {
+  const { state } = contested();
+  classes.buy(state, 'class:lamp');
+  assert.equal(state.classes.tier.lamp, 1);
+});
+
+test('a class that others require also earns the best dependent\'s gain, scaled to its share of the bundle cost', () => {
+  // wifi running and taps going so the router (tap work in this fixture) has a positive gain; the
+  // router requires the rack.
+  const c = { ...ctx(), tps: 2, policy: { restartManualJobs: true } };
+  const room = (mutate = () => {}) => {
+    const state = roomed(); mutate(state.config); classes.init(state, state.config);
+    jobs.init(state, state.config); taps.init(state, state.config);
+    jobs.buy(state, 'job:wifi:lv'); jobs.tick(state, 0, c);
+    return state;
+  };
+  const gain = (state, id) => classes.offers(state, c).find((o) => o.id === `class:${id}`)?.gainPerSec;
+  const free = room((cfg) => { delete cfg.classes.list.find((x) => x.id === 'router').requires; });
+  const routerAlone = gain(free, 'router');
+  const rackAlone = gain(free, 'rack');
+  assert.ok(routerAlone > 0);
+  const tied = room();
+  const by = Object.fromEntries(tied.config.classes.list.map((x) => [x.id, x]));
+  const rackCost = by.rack.tiers[0].cost, routerCost = by.router.tiers[0].cost;
+  close(gain(tied, 'rack'), rackAlone + routerAlone * rackCost / (rackCost + routerCost));
+  classes.buy(tied, 'class:rack');
+  assert.ok(gain(tied, 'router') > 0);
+});
+
+test('the room records roomComplete once, when nothing is left to place or upgrade', () => {
+  const state = roomed();
+  state.day = 3; state.t = 99;
+  const events = [];
+  const c = { ...ctx(), record: (e) => events.push(e) };
+  classes.tick(state, 1, c);
+  assert.equal(events.length, 0);
+  for (let guard = 0; guard < 200; guard++) {
+    const offer = classes.offers(state, c)[0];
+    if (!offer) break;
+    classes.buy(state, offer.id);
+  }
+  classes.tick(state, 1, c);
+  classes.tick(state, 1, c);
+  assert.deepEqual(events.map((e) => e.kind), ['roomComplete']);
+  assert.equal(classes.metrics(state)['room.complete'], 1);
+});
+
+test('a class that can never be placed does not keep the room incomplete', () => {
+  const state = roomed();
+  state.config.classes.list = state.config.classes.list.filter((x) => x.id !== 'expand');   // no extra slots: some items never fit
+  classes.init(state, state.config);
+  const events = [];
+  const c = { ...ctx(), record: (e) => events.push(e) };
+  for (let guard = 0; guard < 200; guard++) {
+    const offer = classes.offers(state, c)[0];
+    if (!offer) break;
+    classes.buy(state, offer.id);
+  }
+  classes.tick(state, 1, c);
+  assert.deepEqual(events.map((e) => e.kind), ['roomComplete']);
+});

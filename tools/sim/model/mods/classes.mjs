@@ -63,6 +63,14 @@ const freeSlot = (state, kind) => roomSlots(state)[kind].cap - roomSlots(state)[
 const placeable = (state, cls) =>
   (!cls.slot || freeSlot(state, cls.slot) > 0) && (!cls.requires || state.classes.tier[cls.requires] > 0);
 
+// Nothing left to buy in the room: owned classes at their last tier, unowned ones unplaceable.
+function roomComplete(state) {
+  return state.config.classes.list.every((cls) => {
+    const tier = state.classes.tier[cls.id];
+    return tier >= cls.tiers.length || (tier === 0 && !placeable(state, cls));
+  });
+}
+
 // Comfort the room runs at: owned tiers plus the average of the owned classes' events.
 function roomComfort(state, cfg) {
   return totalComfort(state) + eventsComfort(state, cfg);
@@ -101,8 +109,35 @@ function refresh(state, cfg) {
 // A tier that adds room slots also earns the share of the best class those slots would let in:
 // desk + lamp is one bundle, and the desk's gain is the lamp's gain × desk cost / bundle cost, so
 // the bundle's value per credit is what the shop sees (`deep` stops that lookup recursing).
+// A class that other classes `require` (the rack holds the router) earns the same kind of bundle
+// share for its best unowned dependent when it is first bought.
 function gainOf(state, cfg, ctx, cls, from, to, deep = true) {
-  return directGain(state, cfg, ctx, cls, from, to) + (deep ? slotGain(state, cfg, ctx, cls, from, to) : 0);
+  const bundles = deep ? slotGain(state, cfg, ctx, cls, from, to) + requiresGain(state, cfg, ctx, cls, from) : 0;
+  return directGain(state, cfg, ctx, cls, from, to) + bundles;
+}
+
+function requiresGain(state, cfg, ctx, cls, from) {
+  if (from !== 0) return 0;
+  const cost = cls.tiers[0].cost;
+  let best = 0;
+  for (const other of cfg.classes.list) {
+    if (other.requires !== cls.id || state.classes.tier[other.id] > 0) continue;
+    const otherCost = other.tiers[0].cost;
+    best = Math.max(best, gainOf(state, cfg, ctx, other, 0, 1, false) * cost / (cost + otherCost));
+  }
+  return best;
+}
+
+// The shop's judgment about scarce slots: a first tier that would fill the last free slot of its
+// kind is held back while another unowned class of that kind (its requirement owned) would gain
+// more from that slot. Items are never removed, so a sensible player keeps the last spot for the
+// best item rather than the cheapest. buy() does not enforce this; only offers() hold back.
+function heldBack(state, cfg, ctx, cls, gain) {
+  if (!cls.slot || freeSlot(state, cls.slot) !== 1) return false;
+  return cfg.classes.list.some((other) =>
+    other !== cls && other.slot === cls.slot && state.classes.tier[other.id] === 0 &&
+    (!other.requires || state.classes.tier[other.requires] > 0) &&
+    gainOf(state, cfg, ctx, other, 0, 1) > gain);
 }
 
 function slotGain(state, cfg, ctx, cls, from, to) {
@@ -163,10 +198,17 @@ export const classes = {
     refresh(state, config);
   },
 
-  tick() {},
+  // Records `roomComplete` once, the first tick on which nothing in the room can be placed or
+  // upgraded any more (every owned class at its last tier, every unowned one without a free slot or
+  // its requirement). firstEvent:/firstDay:roomComplete come from it.
+  tick(state, dt, ctx) {
+    if (state.classes.completeRecorded || !roomComplete(state)) return;
+    state.classes.completeRecorded = true;
+    ctx.record?.({ kind: 'roomComplete' });
+  },
 
   // Each class is offered at its next tier until the last one is owned: kind 'class' for the
-  // first tier (only while it can be placed), 'tier' for the later ones.
+  // first tier (only while it can be placed and is not held back for a better item), 'tier' for the later ones.
   offers(state, ctx) {
     const cfg = state.config;
     const out = [];
@@ -174,12 +216,9 @@ export const classes = {
       const tier = state.classes.tier[cls.id];
       if (tier >= cls.tiers.length) continue;
       if (tier === 0 && !placeable(state, cls)) continue;
-      out.push({
-        id: OFFER_PREFIX + cls.id,
-        cost: cls.tiers[tier].cost,
-        gainPerSec: gainOf(state, cfg, ctx, cls, tier, tier + 1),
-        kind: tier === 0 ? 'class' : 'tier',
-      });
+      const gainPerSec = gainOf(state, cfg, ctx, cls, tier, tier + 1);
+      if (tier === 0 && heldBack(state, cfg, ctx, cls, gainPerSec)) continue;
+      out.push({ id: OFFER_PREFIX + cls.id, cost: cls.tiers[tier].cost, gainPerSec, kind: tier === 0 ? 'class' : 'tier' });
     }
     return out;
   },
@@ -210,6 +249,7 @@ export const classes = {
       'classes.tiers': owned.reduce((sum, { tier }) => sum + tier, 0),
       'comfort.total': totalComfort(state),
       'slots.rig': rigSlots(state),
+      'room.complete': roomComplete(state) ? 1 : 0,
     };
     for (const kind of SLOT_KINDS) {
       const s = roomSlots(state)[kind];

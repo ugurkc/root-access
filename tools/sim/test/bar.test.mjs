@@ -141,7 +141,8 @@ test('the bar bonus makes day 1 earn more than taps and jobs alone', () => {
 
 test('boosts active at session end do not scale offline earnings', () => {
   // wifi is capped at level 1 so the shop cannot level it: a run pays exactly 2 and offline earnings
-  // are a known number of whole runs. stream gets bought from rep but is not rigged, so it earns nothing away.
+  // are a known number of whole runs. stream gets bought from rep but is not rigged: away, only its
+  // run in progress finishes, once.
   const capped = structuredClone(cfg); capped.jobs.maxLevel = 1;
   const seen = [];
   // The rigs module is left out so a helper rigs wifi at init and, ticking last in the gap loop,
@@ -158,7 +159,8 @@ test('boosts active at session end do not scale offline earnings', () => {
   const r = run({ config: capped, profile: active, days: 2, modules: [taps, bar, jobs, offline, helper] });
   const gaps = r.timeline.filter((e) => e.kind === 'offline');
   assert.equal(gaps.length, 3);
-  assert.equal(gaps[0].earned, 2 * Math.floor(8 * 3600 / 6));
+  // 8 h of wifi runs, plus the hand-started stream run in progress at session end finishing once (8).
+  assert.equal(gaps[0].earned, 2 * Math.floor(8 * 3600 / 6) + 8);
   assert.deepEqual(seen.map((s) => s.boosts), [0, 0, 0]);
   assert.deepEqual(seen.map((s) => s.speedMult), [1, 1, 1]);
 });

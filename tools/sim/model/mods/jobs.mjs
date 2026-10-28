@@ -143,18 +143,34 @@ export const jobs = {
     }
   },
 
-  // While away only rigged jobs run, for at most `offline.capHours` × offlineMult, in whole runs.
+  // While away, work advances for at most `offline.capHours` × offlineMult seconds.
+  // A rigged job loops in whole runs; the unfinished part of a run (including progress made before
+  // leaving) carries over to the next session. A hand-started run in progress keeps going at hand
+  // speed and pays once if it finishes, then stops, as it would in a session; `offline.handRuns`
+  // "pause" freezes it instead. A hand job that was not running earns nothing.
   offline(state, seconds, ctx) {
     const cfg = state.config;
     const secs = Math.min(seconds, offlineCapSeconds(cfg, ctx));
     if (secs <= 0) return;
+    const handRuns = cfg.offline.handRuns ?? 'finish';
     for (const job of cfg.jobs.list) {
       const j = state.jobs.byId[job.id];
-      if (j.lv === 0 || !j.rigged) continue;
-      const runs = Math.floor(secs * workSpeed(cfg, ctx, true) / runTime(job, ctx));
-      state.credits += runs * payFor(state, cfg, job.id, ctx);
-      state.jobs.rep += runs * job.rep;
-      j.runs += runs;
+      if (j.lv === 0) continue;
+      const need = runTime(job, ctx);
+      if (j.rigged) {
+        const work = j.work + secs * workSpeed(cfg, ctx, true);
+        const runs = Math.floor(work / need);
+        state.credits += runs * payFor(state, cfg, job.id, ctx);
+        state.jobs.rep += runs * job.rep;
+        j.runs += runs;
+        j.work = work - runs * need;
+        continue;
+      }
+      if (!j.running || handRuns === 'pause') continue;
+      j.work += secs * workSpeed(cfg, ctx, false);
+      if (j.work < need) continue;
+      finishRun(state, cfg, job, ctx);
+      j.running = false;
       j.work = 0;
     }
   },

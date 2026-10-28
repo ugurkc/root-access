@@ -58,7 +58,7 @@ export const SHAPES = {
   }, { slots: SLOTS }),               // the room's base slot counts; absent = none of each kind
   events: record({ enabled: bool, window: num, first: num, min: num, max: num, acceptRate: num }),
   loot: record({ enabled: bool, chance: prob, payRuns: atLeast(0) }),
-  offline: record({ enabled: bool, capHours: pos }),
+  offline: record({ enabled: bool, capHours: pos }, { handRuns: enumOf(['finish', 'pause']) }),
 };
 
 export const BLOCKS = Object.keys(SHAPES);

@@ -61,11 +61,14 @@ for (const [id, r] of Object.entries(runs)) {
   });
 }
 
-// The rack provides three rig slots and there is one rack tier, so three rigs is the room full.
-test('active: owns three rigs (the rack is full) by day 7', () => {
-  assert.equal(runs.active.metrics['rigs.count'], 3);
-  assert.equal(runs.active.metrics['slots.rigFree'], 0);
-});
+// The starter room is meant to be finished inside the week, and the first four jobs scripted.
+for (const [id, r] of Object.entries(runs)) {
+  test(`${id}: the room is complete by day 7 and wifi, stream, phone and kebab are scripted`, () => {
+    assert.equal(r.metrics['room.complete'], 1);
+    assert.ok(r.metrics['firstDay:roomComplete'] <= DAYS, `firstDay:roomComplete = ${r.metrics['firstDay:roomComplete']}`);
+    for (const job of ['wifi', 'stream', 'phone', 'kebab']) assert.equal(r.metrics[`jobs.${job}.rigged`], 1, job);
+  });
+}
 
 // Exact fixture. Credits are rounded to 6 significant digits so the fixture is readable and
 // stable under reordering of floating-point sums; purchase lists are compared verbatim.
@@ -75,6 +78,7 @@ const snapshot = (r) => ({
   'credits.final': sig6(r.metrics['credits.final']),
   'offersLeft.final': r.metrics['offersLeft.final'],
   'firstEvent:rig': sig6(r.metrics['firstEvent:rig']),
+  'firstDay:roomComplete': r.metrics['firstDay:roomComplete'],
 });
 const FIXTURE = new URL('./fixtures/starter-expected.json', import.meta.url);
 

@@ -177,3 +177,10 @@ test('slot kinds, base slot counts, tier slots and requires are validated', () =
   assert.deepEqual(broken((c) => { c.rigs.slots = 6; }), []);
   reportsAt(broken((c) => { c.rigs.slots = 2.5; }), 'rigs.slots');
 });
+
+test('offline.handRuns is optional and must be "finish" or "pause"', () => {
+  const ok = base(); ok.offline.handRuns = 'pause';
+  assert.deepEqual(validateConfig(ok), []);
+  const bad = base(); bad.offline.handRuns = 'loop';
+  assert.deepEqual(validateConfig(bad).map((e) => e.path), ['offline.handRuns']);
+});

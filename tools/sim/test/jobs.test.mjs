@@ -135,8 +135,8 @@ test('rigSpeedMult speeds up rigged jobs only, active and offline', () => {
   assert.equal(runRate(state, state.config, 'wifi', c), 2 / 6 * 2);
   assert.equal(runRate(state, state.config, 'stream', c), 8 / 15);
   state.credits = 0;
-  jobs.offline(state, 60, c);                 // 60 s × 2 / 6 = 20 wifi runs; stream is not rigged
-  assert.equal(state.credits, 40);
+  jobs.offline(state, 60, c);                 // 60 s × 2 / 6 = 20 wifi runs; the hand-started stream run
+  assert.equal(state.credits, 40 + 8);        // (3 of 15 s done) finishes at hand speed and pays 8 once
 });
 
 test('runRate can value a job as if rigged before the rig is bought', () => {
@@ -192,8 +192,8 @@ test('rigs.speed slows rigged jobs only, active and offline', () => {
   jobs.tick(state, 6, c);
   assert.equal(state.credits, 2);
   state.credits = 0;
-  jobs.offline(state, 60, c);                 // 60 s × 0.5 / 6 = 5 wifi runs
-  assert.equal(state.credits, 10);
+  jobs.offline(state, 60, c);                 // 60 s × 0.5 / 6 = 5 wifi runs, plus the hand-started
+  assert.equal(state.credits, 10 + 8);        // stream run (12 of 15 s done) finishing once for 8
 });
 
 test('ctx.timeCut shortens every run but never under 1 s', () => {
@@ -217,4 +217,54 @@ test('offlineMult stretches the offline cap: 8 h × 1.5 of a long absence earns'
   jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
   jobs.offline(state, 24 * 3600, { ...ctx(), offlineMult: 1.5 });        // 12 h of 6 s runs at 2 each
   assert.equal(state.credits, 12 * 3600 / 6 * 2);
+});
+
+test('offline carries a rigged job\'s partial run across the absence', () => {
+  const s = fresh(); jobs.init(s, cfg, active);
+  s.jobs.byId.wifi.lv = 1; setRigged(s, 'wifi', 'Script');
+  s.jobs.byId.wifi.running = true; s.jobs.byId.wifi.work = 4;   // 4 of 6 s done before leaving
+  jobs.offline(s, 5, ctx1);                                     // 4 + 5 = 9 s: one run, 3 s carried
+  assert.equal(s.credits, 2);
+  assert.equal(runsOf(s, 'wifi'), 1);
+  assert.ok(Math.abs(s.jobs.byId.wifi.work - 3) < 1e-9);
+  jobs.offline(s, 3, ctx1);                                     // 3 + 3 = 6 s: a second run, nothing left
+  assert.equal(s.credits, 4);
+  assert.ok(Math.abs(s.jobs.byId.wifi.work) < 1e-9);
+});
+
+test('a hand-started run keeps going while away, pays once and stops', () => {
+  const s = fresh(); jobs.init(s, cfg, active);
+  s.jobs.byId.wifi.lv = 1; s.jobs.byId.wifi.running = true; s.jobs.byId.wifi.work = 2;
+  jobs.offline(s, 3, ctx1);                                     // 2 + 3 = 5 of 6 s: not done yet
+  assert.equal(s.credits, 0);
+  assert.equal(s.jobs.byId.wifi.running, true);
+  assert.ok(Math.abs(s.jobs.byId.wifi.work - 5) < 1e-9);
+  jobs.offline(s, 10 * 3600, ctx1);                             // finishes, pays once, does not loop
+  assert.equal(s.credits, 2);
+  assert.equal(runsOf(s, 'wifi'), 1);
+  assert.equal(s.jobs.byId.wifi.running, false);
+  assert.equal(s.jobs.byId.wifi.work, 0);
+  assert.equal(s.jobs.rep, 3);
+});
+
+test('a hand job that is not running earns nothing offline; the offline window caps hand runs too', () => {
+  const idle = fresh(); jobs.init(idle, cfg, active); idle.jobs.byId.wifi.lv = 1;
+  jobs.offline(idle, 3600, ctx1);
+  assert.equal(idle.credits, 0);
+  const slow = structuredClone(cfg); slow.jobs.list[0].time = 10 * 3600;   // a 10 h run against the 8 h window
+  const s = fresh(slow); jobs.init(s, slow, active);
+  s.jobs.byId.wifi.lv = 1; s.jobs.byId.wifi.running = true;
+  jobs.offline(s, 24 * 3600, ctx1);
+  assert.equal(s.credits, 0);
+  assert.ok(Math.abs(s.jobs.byId.wifi.work - 8 * 3600) < 1e-6);
+});
+
+test('offline.handRuns "pause" freezes hand-started runs while away', () => {
+  const paused = structuredClone(cfg); paused.offline.handRuns = 'pause';
+  const s = fresh(paused); jobs.init(s, paused, active);
+  s.jobs.byId.wifi.lv = 1; s.jobs.byId.wifi.running = true; s.jobs.byId.wifi.work = 2;
+  jobs.offline(s, 3600, ctx1);
+  assert.equal(s.credits, 0);
+  assert.equal(s.jobs.byId.wifi.work, 2);
+  assert.equal(s.jobs.byId.wifi.running, true);
 });

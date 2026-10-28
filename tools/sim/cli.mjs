@@ -5,6 +5,7 @@
 //   node tools/sim/cli.mjs validate --config <path> | --targets <path> | --profile <id|path>
 //   node tools/sim/cli.mjs run --config <path> [--profile <id|path>]… [--days 7] [--targets <path>] [--json]
 //   node tools/sim/cli.mjs sweep --config <path> --param <path> --values a,b [--param2 … --values2 …] [--json]
+//   node tools/sim/cli.mjs stress --config <path> [--profile <id|path>]… [--days 7] [--targets <path>] [--json]
 //   node tools/sim/cli.mjs convert --to js|json --in <path> --out <path>
 import { parseArgs } from 'node:util';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -16,6 +17,7 @@ import { validateConfig } from './model/config.mjs';
 import { validateProfile } from './model/profile.mjs';
 import { evaluate, validateTargets } from './model/targets.mjs';
 import { sweep } from './model/sweep.mjs';
+import { stress, VARIANTS } from './model/stress.mjs';
 import { toJs, fromJs } from './model/convert.mjs';
 import { fmt } from './ui/format.mjs';
 import { showCell } from './ui/sweep.mjs';
@@ -39,6 +41,11 @@ commands
                                     Paths: jobs.list[wifi].cost, rigs.list[stream].cost, loot.chance,
                                     classes.list[rack].tiers[0].cost (tiers by index; quote paths:
                                     zsh and bash expand unquoted brackets)
+  stress --config <path> [--profile <id|path>]... [--days N] [--targets <path>] [--json]
+                                    run each profile as profiled and perturbed (${VARIANTS.slice(1).map((v) => v.id).join(', ')});
+                                    one row per profile and variant with the money earned, the change
+                                    against the unperturbed run, first script, room-complete day,
+                                    first loot and passes/total
   convert --to js --in <config.json> --out <config.js>
   convert --to json --in <config.js> --out <config.json>
                                     between the simulator's JSON and the game's window.RA_CONFIG script.
@@ -241,6 +248,32 @@ function cmdSweep(args) {
   return 0;
 }
 
+function cmdStress(args) {
+  const { values } = parseArgs({ args, options: {
+    config: { type: 'string' }, profile: { type: 'string', multiple: true }, days: { type: 'string' },
+    targets: { type: 'string' }, json: { type: 'boolean', default: false },
+  } });
+  const days = parseDays(values.days);
+  const config = loadConfig(values.config);
+  const targets = loadTargets(values.targets);
+  const profiles = loadProfiles(values.profile ?? []);
+  const rows = stress({ config, profiles, targets, days });
+  if (values.json) { print(JSON.stringify(rows, null, 2)); return 0; }
+  const seconds = (x) => (x === undefined ? '-' : `${Math.round(x)} s`);
+  const day = (x) => (x === undefined ? '-' : `d${x}`);
+  const header = ['profile', 'variant', 'earned', 'vs base', 'first script', 'room done', 'first loot', 'passive $/s', ...(targets.length ? ['pass'] : [])];
+  const body = rows.map((r) => [
+    r.profile, r.variant, fmt(r.earned), r.variant === 'base' ? '' : `${r.deltaPct >= 0 ? '+' : ''}${r.deltaPct.toFixed(0)}%`,
+    `${seconds(r.metrics['firstEvent:rig'])} ${day(r.metrics['firstDay:rig'])}`, day(r.metrics['firstDay:roomComplete']),
+    seconds(r.metrics['firstEvent:loot']), fmt(r.metrics['income.passive']),
+    ...(targets.length ? [`${r.passes}/${r.total}`] : []),
+  ]);
+  print(table([header, ...body]));
+  print('');
+  for (const v of VARIANTS) print(`${v.id.padStart(14)}  ${v.label}`);
+  return 0;
+}
+
 // Any config.js, including hand-written ones: evaluate it with a bare `window` and read the assignment.
 function evaluateConfigJs(source, path) {
   const sandbox = { window: {} };
@@ -266,7 +299,7 @@ function cmdConvert(args) {
   return 0;
 }
 
-const COMMANDS = { validate: cmdValidate, run: cmdRun, sweep: cmdSweep, convert: cmdConvert };
+const COMMANDS = { validate: cmdValidate, run: cmdRun, sweep: cmdSweep, stress: cmdStress, convert: cmdConvert };
 
 export function main(argv) {
   const [command, ...rest] = argv;

@@ -30,16 +30,21 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
 
   const timeline = [];
   const firstEvent = {};
+  const firstDay = {};
   const summary = Array.from({ length: days }, (_, i) => ({
     day: i + 1, activeMinutes: 0, credits: 0, incomePassive: 0, offlineEarned: 0, activeEarned: 0, purchases: [],
   }));
   let activeSeconds = 0;
   const shopStats = { capHits: 0 };
   // Every timeline event has t, day and kind; a purchase also has a numeric cost. The first time
-  // each kind (other than offline) appears is a metric, so a module-recorded kind gets one too.
+  // each kind (other than offline) appears is a metric, so a module-recorded kind gets one too:
+  // firstEvent:<kind> in active seconds and firstDay:<kind> as the day it landed on.
   const record = (event) => {
     timeline.push(event);
-    if (event.kind !== 'offline' && !(event.kind in firstEvent)) firstEvent[event.kind] = activeSeconds;
+    if (event.kind !== 'offline' && !(event.kind in firstEvent)) {
+      firstEvent[event.kind] = activeSeconds;
+      firstDay[event.kind] = event.day;
+    }
   };
 
   let prevEnd = null;
@@ -104,6 +109,7 @@ export function run({ config, profile, days = 7, modules = defaultModules() }) {
   const metrics = {};
   for (const m of mods) Object.assign(metrics, m.metrics(state, finalCtx));
   for (const [kind, seconds] of Object.entries(firstEvent)) metrics[`firstEvent:${kind}`] = seconds;
+  for (const [kind, day] of Object.entries(firstDay)) metrics[`firstDay:${kind}`] = day;
   metrics.purchasesPerDay = summary.map((r) => r.purchases.length);
   metrics.purchasesByKindPerDay = byKind;
   metrics['credits.final'] = state.credits;

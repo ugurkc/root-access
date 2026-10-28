@@ -14,7 +14,7 @@ test('getPath/setPath address array entries by id, by job (rigs) or by index, ne
   assert.equal(getPath(cfg, 'jobs.list[wifi].cost'), 5);
   assert.equal(getPath(cfg, 'jobs.list[1].id'), 'stream');
   assert.equal(getPath(cfg, 'rigs.list[stream].cost'), 6000);
-  assert.equal(getPath(cfg, 'classes.list[computer].tiers[0].value'), 1.15);
+  assert.equal(getPath(cfg, 'classes.list[gpu].tiers[0].value'), 1.2);
   assert.equal(getPath(cfg, 'classes.list[rack].tiers[0].cost'), 60);
   setPath(cfg, 'jobs.list[wifi].cost', 9);
   setPath(cfg, 'rigs.list[stream].cost', 1);
@@ -44,9 +44,9 @@ test('sweep over two values yields two rows with total = targets × profiles', (
       assert.deepEqual(Object.keys(m), ['firstEvent:rig', 'rigs.count', 'credits.final', 'offersLeft.final']);
     }
   }
-  // The first row is the preset itself: 10 of 12 pass, as in the targets test (2026-10-28 baseline),
+  // The first row is the preset itself: 8 of 12 pass, as in the targets test (accepted room preset),
   // and its first rig time is the one the pacing fixture pins (6 significant digits, as the fixture rounds).
-  assert.equal(rows[0].passes, 10);
+  assert.equal(rows[0].passes, 8);
   const expected = load('./fixtures/starter-expected.json');
   assert.equal(Number(rows[0].metrics.active['firstEvent:rig'].toPrecision(6)), expected.active['firstEvent:rig']);
   assert.notEqual(rows[1].metrics.active['credits.final'], rows[0].metrics.active['credits.final']);

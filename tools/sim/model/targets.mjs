@@ -3,7 +3,8 @@
 // A target is { id, label, metric, op, value, profile: 'all' | '<profileId>', days?: [from, to] }.
 // Ops: <=, <, >=, >, == (exact: `actual === value`, no tolerance). Metric names resolve against a
 // run result `r` (core.mjs run()):
-//   '<key>'                      r.metrics[key], e.g. 'firstEvent:rig', 'offersLeft.final'
+//   '<key>'                      r.metrics[key], e.g. 'firstEvent:rig', 'firstDay:roomComplete', 'offersLeft.final';
+//                                a firstEvent:/firstDay: metric that never fired has no value
 //   'purchasesPerDay:min|max|sum'          over r.metrics.purchasesPerDay
 //   'purchasesPerDay[k1,k2]:min|max|sum'   over the per-day sum of r.metrics.purchasesByKindPerDay for
 //                                          the listed offer kinds (one or more of KINDS); an unknown
@@ -36,7 +37,7 @@ export const KINDS = PURCHASE_KINDS;
 
 const SUMMARY_RE = /^summary\.([A-Za-z_]\w*):day([1-9]\d*)$/;
 const PER_DAY_RE = /^purchasesPerDay(?:\[([^\]]*)\])?:(\w+)$/;
-const FIRST_EVENT_PREFIX = 'firstEvent:';
+const FIRST_PREFIXES = ['firstEvent:', 'firstDay:'];
 
 const isPerDayMetric = (metric) => typeof metric === 'string' && PER_DAY_RE.test(metric);
 
@@ -72,7 +73,7 @@ export function resolveMetric(r, metric, days) {
   if (metric.startsWith('summary.')) return { error: 'unknown metric' };
   const metrics = r.metrics ?? {};
   if (Object.hasOwn(metrics, metric)) return { actual: metrics[metric] };
-  if (metric.startsWith(FIRST_EVENT_PREFIX)) return { actual: undefined };
+  if (FIRST_PREFIXES.some((p) => metric.startsWith(p))) return { actual: undefined };
   return { error: 'unknown metric' };
 }
 

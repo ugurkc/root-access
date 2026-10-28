@@ -174,8 +174,8 @@ test('sweep: one row per value, with passes/total and per-profile first rig and 
   assert.match(rows[0], /firstEvent:rig\/active/);
   assert.match(rows[0], /offersLeft\.final\/casual/);
   assert.equal(rows.length, 3, r.out);
-  // The first row is the preset itself: 10/12 (2026-10-28 baseline, only daily-rig-or-item fails).
-  assert.match(rows[1], /^\s*5\s+10\/12\s/);
+  // The first row is the preset itself: 8/12 (accepted room preset; see targets.test.mjs for the four failures).
+  assert.match(rows[1], /^\s*5\s+8\/12\s/);
   assert.match(rows[2], /^\s*10\s+\d+\/12\s/);
 });
 
@@ -248,4 +248,23 @@ test('convert: --to json falls back to evaluating a hand-written config.js', () 
   assert.deepEqual(JSON.parse(readFileSync(out, 'utf8')), { schema: 1, list: [1, 2] });
   assert.equal(cli('convert', '--to', 'yaml', '--in', src, '--out', out).code, 2);
   assert.equal(cli('convert', '--to', 'json', '--in', src).code, 2);
+});
+
+test('stress: a table of profile × variant with the change against base, then the variant legend', () => {
+  const r = cli('stress', '--config', PRESET, '--targets', TARGETS, '--days', '3');
+  assert.equal(r.code, 0, r.out + r.err);
+  const lines = r.out.trim().split('\n');
+  assert.match(lines[0], /profile\s+variant\s+earned\s+vs base\s+first script\s+room done\s+first loot\s+passive \$\/s\s+pass/);
+  assert.match(lines[1], /^\s*active\s+base\s+\S+\s{2,}\d+ s d1/);
+  assert.ok(lines.some((l) => /^\s*casual\s+slow-taps\s+\S+\s+-\d+%/.test(l)), r.out);
+  assert.ok(!lines.some((l) => /^\s*casual\s+fewer-visits/.test(l)), 'skipped for a one-session profile');
+  assert.ok(lines.some((l) => /^\s*impulsive  never saves up/.test(l)), 'legend');
+});
+
+test('stress --json: the raw rows', () => {
+  const r = cli('stress', '--config', PRESET, '--profile', 'casual', '--days', '2', '--json');
+  assert.equal(r.code, 0, r.out + r.err);
+  const rows = JSON.parse(r.out);
+  assert.equal(rows[0].variant, 'base');
+  assert.ok(rows.every((x) => x.profile === 'casual' && Number.isFinite(x.earned)));
 });

@@ -119,7 +119,9 @@ test('a full run earns loot, times its first drop, and keeps loot events out of 
   assert.ok(lootEvents.length > 0);
   assert.ok(lootEvents.every((e) => !('cost' in e)));
   const nonOffline = r.timeline.filter((e) => e.kind !== 'offline').length;
-  assert.equal(m.purchasesPerDay.reduce((a, b) => a + b, 0) + lootEvents.length, nonOffline);
+  const roomEvents = r.timeline.filter((e) => e.kind === 'roomComplete').length;   // at most one, no cost either
+  assert.ok(roomEvents <= 1);
+  assert.equal(m.purchasesPerDay.reduce((a, b) => a + b, 0) + lootEvents.length + roomEvents, nonOffline);
   assert.equal(m['shop.capHits'], 0);
 });
 

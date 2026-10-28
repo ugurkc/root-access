@@ -17,7 +17,7 @@ test('showCell: a chance keeps its digits, a time keeps one decimal, a gap is a 
 test('leafNumericPaths: every numeric leaf of the preset, by id, job or index, none for schema/enabled', () => {
   const paths = leafNumericPaths(config);
   for (const p of ['taps.rate', 'bar.steps', 'jobs.maxLevel', 'jobs.list[wifi].cost', 'jobs.list[radio].r', 'rigs.list[radio].cost',
-    'classes.list[rack].tiers[0].value', 'classes.list[computer].tiers[3].cost', 'classes.list[cat].event.boost', 'loot.chance']) {
+    'classes.list[rack].tiers[0].value', 'classes.list[computer].tiers[2].cost', 'classes.list[cat].event.boost', 'loot.chance']) {
     assert.ok(paths.includes(p), `${p} listed`);
   }
   assert.ok(!paths.includes('schema'));
