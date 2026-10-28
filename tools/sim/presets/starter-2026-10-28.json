@@ -20,12 +20,12 @@
     ]
   },
   "rigs": { "enabled": true, "list": [
-    { "job": "wifi",    "name": "Wi-Fi cracking script",  "cost": 120 },
-    { "job": "stream",  "name": "Account checker bot",    "cost": 600 },
-    { "job": "phone",   "name": "Phone unlock kit",       "cost": 2500 },
-    { "job": "kebab",   "name": "Loyalty app exploit",    "cost": 12000 },
-    { "job": "dentist", "name": "Ransomware kit",         "cost": 60000 },
-    { "job": "radio",   "name": "Transmitter hijack rig", "cost": 250000 } ] },
+    { "job": "wifi",    "name": "Wi-Fi cracking script",  "cost": 1200 },
+    { "job": "stream",  "name": "Account checker bot",    "cost": 6000 },
+    { "job": "phone",   "name": "Phone unlock kit",       "cost": 25000 },
+    { "job": "kebab",   "name": "Loyalty app exploit",    "cost": 120000 },
+    { "job": "dentist", "name": "Ransomware kit",         "cost": 600000 },
+    { "job": "radio",   "name": "Transmitter hijack rig", "cost": 2500000 } ] },
   "classes": { "enabled": true, "list": [
     { "id": "rack", "name": "Rack", "effect": "rigSlots", "tiers": [
       { "name": "Server rack", "cost": 60, "value": 3, "comfort": 0 } ] },

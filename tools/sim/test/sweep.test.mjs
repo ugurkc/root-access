@@ -13,7 +13,7 @@ test('getPath/setPath address array entries by id, by job (rigs) or by index, ne
   const cfg = structuredClone(config);
   assert.equal(getPath(cfg, 'jobs.list[wifi].cost'), 5);
   assert.equal(getPath(cfg, 'jobs.list[1].id'), 'stream');
-  assert.equal(getPath(cfg, 'rigs.list[stream].cost'), 600);
+  assert.equal(getPath(cfg, 'rigs.list[stream].cost'), 6000);
   assert.equal(getPath(cfg, 'classes.list[computer].tiers[0].value'), 1.15);
   assert.equal(getPath(cfg, 'classes.list[rack].tiers[0].cost'), 60);
   setPath(cfg, 'jobs.list[wifi].cost', 9);
