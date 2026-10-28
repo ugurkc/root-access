@@ -34,7 +34,7 @@ test('loot from an absence waits until the next session', () => {
   assert.equal(loot.metrics(state)['loot.pending'], 0);
 });
 
-test('a loot timeline event is recorded whenever the expected drop count crosses a whole number', () => {
+test('a claim that crosses a whole expected drop records one loot event carrying the drops seen', () => {
   const state = setup();
   const events = [];
   const c = { ...ctx(), record: (e) => events.push(e) };
@@ -45,9 +45,27 @@ test('a loot timeline event is recorded whenever the expected drop count crosses
   assert.equal(events.length, 1);
   assert.equal(events[0].kind, 'loot');
   assert.equal(events[0].id, 'loot:wifi');
+  assert.equal(events[0].drops, 1);
+  close(events[0].earned, 40 * 0.03 * 25 * 2);  // the pool cashed at that claim
   assert.equal('cost' in events[0], false);
   jobs.offline(state, 6 * 40, c); loot.offline(state, 6 * 40, c); loot.tick(state, 1, c);   // 2.4 → one more event
   assert.equal(events.length, 2);
+  assert.equal(events[1].drops, 1);
+  jobs.offline(state, 6 * 70, c); loot.offline(state, 6 * 70, c); loot.tick(state, 1, c);   // 4.5 → one event, two drops
+  assert.equal(events.length, 3);
+  assert.equal(events[2].drops, 2);
+  close(events[2].earned, 70 * 0.03 * 25 * 2);
+});
+
+test('a claim below a whole drop cashes the pool but records no event', () => {
+  const state = setup();
+  const events = [];
+  const c = { ...ctx(), record: (e) => events.push(e) };
+  jobs.tick(state, 6, c);                       // one run → 0.03 expected drops
+  const before = state.credits;
+  loot.tick(state, 1, c);
+  close(state.credits - before, 1.5);
+  assert.deepEqual(events, []);
 });
 
 test('pending loot is valued at the pay when the run completed, not when it is claimed', () => {

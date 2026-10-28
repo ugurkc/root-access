@@ -3,8 +3,11 @@
 // the expectation, not the dice: every new run (read through jobs.mjs `runsOf`) adds
 // chance × payRuns × pay to a pending pool and `chance` to an expected drop count. The pool is cashed
 // on the next active tick (the player taps the card), so loot dropped while away lands at the start
-// of the next session. One `loot` timeline event per whole expected drop, recorded at claim time
-// through ctx.record with no cost: it is not a purchase. The loot texts (`jobs.list[i].loot`) are
+// of the next session. A claim that brings the expected drop count past a whole number records one
+// `loot` timeline event through ctx.record, `{ earned, drops }`: `earned` is the pool cashed at that
+// claim and `drops` the number of cards the player would have seen. It has no cost: it is not a
+// purchase. Claims below a whole drop cash the pool but record nothing, so the metric `loot.earned`
+// is the authoritative total, not the sum of the events. The loot texts (`jobs.list[i].loot`) are
 // the game's; the sim never reads them.
 import { runsOf, payFor } from './jobs.mjs';
 
@@ -57,17 +60,19 @@ function accrue(state, ctx) {
   }
 }
 
-// Cash the pool. One event per whole expected drop, attributed to the job with the most pending loot.
+// Cash the pool. One event per claim that crosses a whole expected drop, attributed to the job with
+// the most pending loot.
 function claim(state, ctx) {
   const l = state.loot;
   if (l.pending <= 0) return;
   const earned = l.pending;
   state.credits += earned;
   l.earned += earned;
-  const top = Object.entries(l.pendingBy).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
-  while (l.recorded + 1 <= l.drops) {
-    l.recorded += 1;
-    ctx.record({ kind: 'loot', id: `loot:${top}`, earned });
+  const whole = Math.floor(l.drops);
+  if (whole > l.recorded) {
+    const top = Object.entries(l.pendingBy).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+    ctx.record({ kind: 'loot', id: `loot:${top}`, earned, drops: whole - l.recorded });
+    l.recorded = whole;
   }
   l.pending = 0;
   for (const id of Object.keys(l.pendingBy)) l.pendingBy[id] = 0;
