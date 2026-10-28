@@ -588,155 +588,18 @@ git commit -m "sim: taps, bar and jobs read tapMult, tapAdvanceMult, barMult and
 
 ## Task 6: Loot module
 
+> Shipped model (amended 2026-10-28 after review): one `loot` timeline event per claim that crosses at least one whole expected drop, carrying `earned` (the pool cashed at that claim) and `drops` (whole drops since the last event). `loot.earned` in metrics is the authoritative total; claims below a whole drop cash but record nothing. The floor uses a 1e-9 epsilon because `drops` is an accumulated float. Pending value is fixed at drop time (the job's pay at the moment the run completed, with that moment's multipliers).
+
 **Files:**
 - Create: `tools/sim/model/mods/loot.mjs`
-- Modify: `tools/sim/model/registry.mjs` (module order)
-- Test: `tools/sim/test/loot.test.mjs`
+- Modify: `tools/sim/model/registry.mjs` (import, module order `taps, bar, jobs, rigs, classes, events, loot, offline`; loot after jobs because it prices the runs that completed this step)
+- Test: `tools/sim/test/loot.test.mjs`; `test/bar.test.mjs` order test
 
-**Step 1: Write the failing tests**
+**Behaviour:** `accrue(state, ctx)`: for each job, fresh = `runsOf − seen`; `pending += fresh × chance × payRuns × payFor(ctx)` (also per job in `pendingBy`), `drops += fresh × chance`. `tick` = accrue then claim; `offline` = accrue only, so loot from a gap lands on the first tick of the next session. `claim`: credits += pending; `whole = floor(drops + 1e-9)`; if `whole > recorded`, `ctx.record({ kind: 'loot', id: 'loot:<job with most pending>', earned: pending, drops: whole − recorded })`, no `cost`; reset pending. Metrics `loot.pending`, `loot.earned`, `loot.drops`.
 
-```js
-import { loot } from '../model/mods/loot.mjs';
-import { jobs, setRigged } from '../model/mods/jobs.mjs';
+**Tests:** per-run accrual cashed on the next tick; absence waits for the next session; events per claim with `drops` 1, 1, then 2 for a 70-run claim; block disabled adds nothing; drop-time pay (a level bought between accrue and claim does not change the claimed amount); sub-whole claim cashes and records nothing; 100 single-run cycles record exactly 3 events with the third at the 100th run; a 3-day full `run()` on the fixture has finite `loot.earned > 0`, numeric `firstEvent:loot`, loot events outside `purchasesPerDay`, `shop.capHits` 0.
 
-const setup = () => {
-  const state = { credits: 0, t: 0, day: 1, config: base() };   // base(): loot chance 0.03, payRuns 25
-  jobs.init(state, state.config); loot.init(state, state.config);
-  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
-  return state;
-};
-
-test('each completed run adds chance × payRuns × pay to pending loot, cashed on the next active tick', () => {
-  const state = setup();
-  const c = ctx();
-  jobs.tick(state, 6, c);                       // one wifi run, pays 2
-  loot.tick(state, 1, c);
-  assert.ok(Math.abs(state.credits - (2 + 0.03 * 25 * 2)) < 1e-9);
-  assert.ok(Math.abs(loot.metrics(state)['loot.earned'] - 1.5) < 1e-9);
-  assert.ok(Math.abs(loot.metrics(state)['loot.drops'] - 0.03) < 1e-9);
-});
-
-test('loot from an absence waits until the next session', () => {
-  const state = setup();
-  const c = ctx();
-  jobs.offline(state, 600, c);                  // 100 runs
-  loot.offline(state, 600, c);
-  const afterGap = state.credits;
-  assert.ok(Math.abs(loot.metrics(state)['loot.pending'] - 100 * 0.03 * 25 * 2) < 1e-9);
-  loot.tick(state, 1, c);
-  assert.ok(Math.abs(state.credits - afterGap - 150) < 1e-9);
-  assert.equal(loot.metrics(state)['loot.pending'], 0);
-});
-
-test('a loot timeline event is recorded whenever the expected drop count crosses a whole number', () => {
-  const state = setup();
-  const events = [];
-  const c = { ...ctx(), record: (e) => events.push(e) };
-  jobs.offline(state, 6 * 40, c);               // 40 runs → 1.2 expected drops
-  loot.offline(state, 6 * 40, c);
-  assert.deepEqual(events, []);                 // not yet claimed
-  loot.tick(state, 1, c);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, 'loot');
-  assert.equal(events[0].id, 'loot:wifi');
-  assert.equal('cost' in events[0], false);
-});
-
-test('with the loot block disabled nothing is added', () => {
-  const cfg = base(); cfg.loot.enabled = false;
-  const state = { credits: 0, t: 0, config: cfg };
-  jobs.init(state, cfg);                        // loot skipped, as the core would
-  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
-  jobs.tick(state, 6, ctx());
-  assert.equal(state.credits, 2);
-});
-```
-
-**Step 2: Run to verify failure**
-
-Run: `node --test test/loot.test.mjs`
-Expected: FAIL (module missing).
-
-**Step 3: Implement**
-
-`model/mods/loot.mjs`:
-
-```js
-// Loot: a completed run drops a funny, cashable piece of information with probability
-// `loot.chance`, worth `loot.payRuns` runs of that job's current pay. Modelled as the expectation,
-// not the dice: every new run (read through jobs.mjs `runsOf`) adds chance × payRuns × pay to a
-// pending pool and `chance` to an expected drop count. The pool is cashed on the next active tick
-// (the player taps the card), so loot dropped while away lands at the start of the next session.
-// One `loot` timeline event per whole expected drop, recorded at claim time, with no cost: it is
-// not a purchase. The loot texts (`jobs.list[i].loot`) are the game's; the sim never reads them.
-import { runsOf, payFor } from './jobs.mjs';
-
-export const loot = {
-  id: 'loot',
-  init(state, config) {
-    state.loot = { pending: 0, earned: 0, drops: 0, recorded: 0, seen: {}, pendingBy: {} };
-    for (const job of config.jobs.list) { state.loot.seen[job.id] = 0; state.loot.pendingBy[job.id] = 0; }
-  },
-  tick(state, dt, ctx) {
-    accrue(state, ctx);
-    claim(state, ctx);
-  },
-  offline(state, seconds, ctx) {
-    accrue(state, ctx);
-  },
-  offers() { return []; },
-  buy() {},
-  metrics(state) {
-    const l = state.loot;
-    return { 'loot.pending': l.pending, 'loot.earned': l.earned, 'loot.drops': l.drops };
-  },
-};
-
-function accrue(state, ctx) {
-  if (!state.jobs) return;
-  const cfg = state.config;
-  const l = state.loot;
-  for (const job of cfg.jobs.list) {
-    const runs = runsOf(state, job.id);
-    const fresh = runs - l.seen[job.id];
-    if (fresh <= 0) continue;
-    l.seen[job.id] = runs;
-    const value = fresh * cfg.loot.chance * cfg.loot.payRuns * payFor(state, cfg, job.id, ctx);
-    l.pending += value;
-    l.pendingBy[job.id] += value;
-    l.drops += fresh * cfg.loot.chance;
-  }
-}
-
-function claim(state, ctx) {
-  const l = state.loot;
-  if (l.pending <= 0) return;
-  state.credits += l.pending;
-  l.earned += l.pending;
-  // One event per whole expected drop, attributed to the job with the most pending loot.
-  const top = Object.entries(l.pendingBy).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
-  while (l.recorded + 1 <= l.drops) {
-    l.recorded += 1;
-    ctx.record?.({ kind: 'loot', id: `loot:${top}`, earned: l.pending });
-  }
-  l.pending = 0;
-  for (const id of Object.keys(l.pendingBy)) l.pendingBy[id] = 0;
-}
-```
-
-`registry.mjs`: `defaultModules()` returns `[taps, bar, jobs, rigs, classes, events, loot, offline]`; `loot` must come after `jobs` (it reads this tick's completions). Update the import lines and the order comment.
-
-**Step 4: Run the tests**
-
-Run: `node --test test/loot.test.mjs`
-Expected: PASS.
-
-**Step 5: Commit**
-
-```bash
-git add tools/sim/model/mods/loot.mjs tools/sim/model/registry.mjs tools/sim/test/loot.test.mjs
-git commit -m "sim: loot module — expected loot drops per completed run, cashed on return"
-```
+Commits: `b215d59`, `948a994`, plus the review follow-up.
 
 ## Task 7: Starter preset, profiles, targets, fixture
 
@@ -806,7 +669,7 @@ git commit -m "sim: loot module — expected loot drops per completed run, cashe
       { "name": "Girlfriend", "cost": 2500, "value": 1, "comfort": 20 } ], "event": { "boost": 100, "dur": 15 } }
   ] },
   "events": { "enabled": true, "window": 20, "first": 15, "min": 60, "max": 120, "acceptRate": 0.7 },
-  "loot": { "enabled": true, "chance": 0.03, "payRuns": 25 },
+  "loot": { "enabled": true, "chance": 0.02, "payRuns": 12 },
   "offline": { "enabled": true, "capHours": 8 }
 }
 ```
