@@ -48,8 +48,7 @@
 //                                       `cost` only for a purchase: the core records purchases itself, so modules
 //                                       use it for non-purchase events such as loot drops
 //
-// Order: taps, bar, jobs, rigs, classes, events, loot, offline (loot lands in Task 6; until then
-// defaultModules() below has no loot).
+// Order: taps, bar, jobs, rigs, classes, events, loot, offline.
 // bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
 // loot must follow jobs: it rolls on the job runs that completed this tick.
 import { taps } from './mods/taps.mjs';
@@ -58,11 +57,13 @@ import { jobs } from './mods/jobs.mjs';
 import { rigs } from './mods/rigs.mjs';
 import { classes } from './mods/classes.mjs';
 import { events } from './mods/events.mjs';
+import { loot } from './mods/loot.mjs';
 import { offline } from './mods/offline.mjs';
 
 // taps before bar so the bar counts this tick's taps; bar before jobs so a boost reaches job work
 // as early as possible (the core collects multipliers() before the tick, so from the next tick on).
+// loot follows jobs (and, in the gap loop, jobs.offline) so it sees the runs completed this step.
 // rigs, classes, events and offline have no tick effect of their own and are order-agnostic.
 export function defaultModules() {
-  return [taps, bar, jobs, rigs, classes, events, offline];
+  return [taps, bar, jobs, rigs, classes, events, loot, offline];
 }
