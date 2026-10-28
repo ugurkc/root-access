@@ -6,9 +6,10 @@ import { evaluate, validateTargets } from '../model/targets.mjs';
 import {
   OP_NAMES, METRIC_FORMS, targetToRow, rowToTarget, blankRow, summarizeVerdicts, metricSuggestions, groupTargetErrors,
 } from '../ui/targets.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const config = load('../presets/v2-2026-10-23.json');
+const config = loadDefaultPreset();
 const profiles = { active: load('../profiles/active.json'), casual: load('../profiles/casual.json') };
 const targets = load('../targets/seven-day-idle.json');
 
@@ -73,5 +74,5 @@ test('metricSuggestions: scalar metric keys of the runs, sorted, then the gramma
   const runs = { a: { metrics: { 'rigs.count': 1, 'firstEvent:rig': 50, purchasesPerDay: [1, 2], purchasesByKindPerDay: {} } }, b: { metrics: { 'offersLeft.final': 3 } } };
   assert.deepEqual(metricSuggestions(runs), ['firstEvent:rig', 'offersLeft.final', 'rigs.count', ...METRIC_FORMS]);
   assert.deepEqual(metricSuggestions({}), METRIC_FORMS);
-  assert.ok(METRIC_FORMS.includes('purchasesPerDay[rig,item]:min') && METRIC_FORMS.includes('summary.incomePassive:day7'));
+  assert.ok(METRIC_FORMS.includes('purchasesPerDay[rig,class,tier]:min') && METRIC_FORMS.includes('summary.incomePassive:day7'));
 });

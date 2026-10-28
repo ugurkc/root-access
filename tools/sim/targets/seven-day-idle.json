@@ -3,5 +3,6 @@
   { "id": "first-rig", "label": "First rig inside the first session", "metric": "firstEvent:rig", "op": "<=", "value": 480, "profile": "all" },
   { "id": "daily-purchase", "label": "A purchase every day D2–D6", "metric": "purchasesPerDay:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" },
   { "id": "d7-not-done", "label": "Something still to buy on day 7", "metric": "offersLeft.final", "op": ">=", "value": 1, "profile": "all" },
-  { "id": "daily-rig-or-item", "label": "A rig or item placed every day D2–D6", "metric": "purchasesPerDay[rig,item]:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" }
+  { "id": "daily-rig-or-item", "label": "A rig or room upgrade every day D2–D6", "metric": "purchasesPerDay[rig,class,tier]:min", "op": ">=", "value": 1, "days": [2, 6], "profile": "all" },
+  { "id": "first-loot", "label": "First loot card within 10 min of play", "metric": "firstEvent:loot", "op": "<=", "value": 600, "profile": "all" }
 ]

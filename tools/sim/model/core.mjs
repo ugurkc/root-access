@@ -4,8 +4,10 @@ import { defaultModules } from './registry.mjs';
 
 export const VERSION = '0.1.0';
 
-// `class` is a class's first tier, `tier` a later one.
-const BIG_KINDS = new Set(['rig', 'class', 'tier']);
+// Purchase kinds the modules emit, in shop order: `class` is a class's first tier, `tier` a later one.
+// Everything but a job level is "big": the shop saves for one (see shop()).
+export const PURCHASE_KINDS = ['level', 'class', 'tier', 'rig'];
+export const BIG_KINDS = new Set(['rig', 'class', 'tier']);
 const MAX_BUYS_PER_SHOP = 300;
 
 // Day 1 plays `sessions.day1`; every later day plays each entry of `sessions.later`, sorted by hour.

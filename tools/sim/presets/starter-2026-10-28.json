@@ -1,0 +1,60 @@
+{
+  "schema": 2,
+  "taps": { "enabled": true, "rate": 0.25, "minMoney": 1, "advance": 0.25 },
+  "bar": { "enabled": true, "steps": 10, "bonusTaps": 15, "speed": 0.25, "speedDur": 12 },
+  "jobs": {
+    "enabled": true, "maxLevel": 50, "milestones": [], "revealAt": 0.6,
+    "list": [
+      { "id": "wifi",    "name": "Guess a neighbor's Wi-Fi password", "time": 6,   "pay": 2,    "cost": 5,     "r": 1.2, "rep": 3,   "unlock": 0,
+        "loot": ["Neighbor's Netflix login", "Their kid's Fortnite account", "A folder called TAXES_FINAL_v7"] },
+      { "id": "stream",  "name": "Sell a cracked streaming account",  "time": 15,  "pay": 8,    "cost": 40,    "r": 1.2, "rep": 9,   "unlock": 25,
+        "loot": ["A password reused on a dating site", "A watch history nobody should see"] },
+      { "id": "phone",   "name": "Recover a locked phone for cash",   "time": 30,  "pay": 30,   "cost": 250,   "r": 1.2, "rep": 30,  "unlock": 400,
+        "loot": ["A photo of someone's winning lottery ticket", "A crypto seed phrase saved in Notes"] },
+      { "id": "kebab",   "name": "Hack a kebab shop's loyalty app",   "time": 60,  "pay": 120,  "cost": 1500,  "r": 1.2, "rep": 90,  "unlock": 6000,
+        "loot": ["The secret garlic sauce recipe", "The owner's 'cash only' spreadsheet"] },
+      { "id": "dentist", "name": "Ransom a dentist's office PC",      "time": 120, "pay": 500,  "cost": 8000,  "r": 1.2, "rep": 300, "unlock": 60000,
+        "loot": ["A celebrity's dental records", "An insurance claim with your name on it now"] },
+      { "id": "radio",   "name": "Crash a local radio station",       "time": 240, "pay": 2000, "cost": 40000, "r": 1.2, "rep": 900, "unlock": 350000,
+        "loot": ["An unreleased demo from a local band", "The DJ's blackmail folder"] }
+    ]
+  },
+  "rigs": { "enabled": true, "list": [
+    { "job": "wifi",    "name": "Wi-Fi cracking script",  "cost": 120 },
+    { "job": "stream",  "name": "Account checker bot",    "cost": 600 },
+    { "job": "phone",   "name": "Phone unlock kit",       "cost": 2500 },
+    { "job": "kebab",   "name": "Loyalty app exploit",    "cost": 12000 },
+    { "job": "dentist", "name": "Ransomware kit",         "cost": 60000 },
+    { "job": "radio",   "name": "Transmitter hijack rig", "cost": 250000 } ] },
+  "classes": { "enabled": true, "list": [
+    { "id": "rack", "name": "Rack", "effect": "rigSlots", "tiers": [
+      { "name": "Server rack", "cost": 60, "value": 3, "comfort": 0 } ] },
+    { "id": "computer", "name": "Computer", "effect": "pay", "tiers": [
+      { "name": "Old laptop",   "cost": 80,   "value": 1.15, "comfort": 0 },
+      { "name": "Used desktop", "cost": 350,  "value": 1.35, "comfort": 0 },
+      { "name": "Gaming PC",    "cost": 1400, "value": 1.65, "comfort": 0 },
+      { "name": "Workstation",  "cost": 4500, "value": 2.0,  "comfort": 0 } ] },
+    { "id": "router", "name": "Router", "effect": "tapAdvance", "tiers": [
+      { "name": "ISP box",       "cost": 40,   "value": 1.5, "comfort": 0 },
+      { "name": "Better router", "cost": 150,  "value": 2.0, "comfort": 0 },
+      { "name": "Mesh Wi-Fi",    "cost": 500,  "value": 3.0, "comfort": 0 },
+      { "name": "Fiber line",    "cost": 1200, "value": 4.0, "comfort": 0 } ] },
+    { "id": "tower", "name": "Tower Unit", "effect": "rigSpeed", "tiers": [
+      { "name": "Tower Unit", "cost": 9000, "value": 2.0, "comfort": 0 } ] },
+    { "id": "desk", "name": "Desk", "effect": "tapMoney", "tiers": [
+      { "name": "Simple desk",   "cost": 30,  "value": 1.25, "comfort": 2 },
+      { "name": "IKAE table",    "cost": 180, "value": 1.6,  "comfort": 5 },
+      { "name": "Standing desk", "cost": 700, "value": 2.0,  "comfort": 10 } ] },
+    { "id": "chair", "name": "Chair", "effect": "barBonus", "tiers": [
+      { "name": "Kitchen chair", "cost": 25,  "value": 1.5, "comfort": 2 },
+      { "name": "Office chair",  "cost": 220, "value": 2.0, "comfort": 5 },
+      { "name": "Gaming chair",  "cost": 600, "value": 3.0, "comfort": 10 } ] },
+    { "id": "cat", "name": "Cat", "effect": "none", "tiers": [
+      { "name": "Cat", "cost": 300, "value": 1, "comfort": 10 } ], "event": { "boost": 20, "dur": 30 } },
+    { "id": "gf", "name": "Girlfriend", "effect": "none", "tiers": [
+      { "name": "Girlfriend", "cost": 2500, "value": 1, "comfort": 20 } ], "event": { "boost": 100, "dur": 15 } }
+  ] },
+  "events": { "enabled": true, "window": 20, "first": 15, "min": 60, "max": 120, "acceptRate": 0.7 },
+  "loot": { "enabled": true, "chance": 0.02, "payRuns": 12 },
+  "offline": { "enabled": true, "capHours": 8 }
+}

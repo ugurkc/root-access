@@ -2,7 +2,7 @@
 // both profiles, 7 days.
 // Two layers (see fixtures/README.md):
 //   1. coarse facts asserted here, measured from the model and expected to survive tuning;
-//   2. an exact fixture (fixtures/v2-expected.json) so any drift in the per-day purchase lists or
+//   2. an exact fixture (fixtures/starter-expected.json) so any drift in the per-day purchase lists or
 //      credits is visible. Regenerate deliberately with `UPDATE_FIXTURE=1 npm test`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,7 +39,7 @@ for (const [id, r] of Object.entries(runs)) {
     assert.ok(r.metrics['firstEvent:rig'] <= FIRST_SESSION[id], `firstEvent:rig = ${r.metrics['firstEvent:rig']}`);
   });
 
-  test(`${id}: at least one non-offline purchase on each of days 2–6`, () => {
+  test(`${id}: at least one purchase on each of days 2–6`, () => {
     const perDay = r.metrics.purchasesPerDay;
     assert.equal(perDay.length, DAYS);
     for (let day = 2; day <= 6; day++) assert.ok(perDay[day - 1] >= 1, `day ${day}: ${perDay[day - 1]} purchases`);
@@ -55,10 +55,16 @@ for (const [id, r] of Object.entries(runs)) {
     }
     assert.equal(byKind.rig.reduce((s, x) => s + x, 0), r.metrics['rigs.count']);
   });
+
+  test(`${id}: loot has paid out by day 7`, () => {
+    assert.ok(r.metrics['loot.earned'] > 0, `loot.earned = ${r.metrics['loot.earned']}`);
+  });
 }
 
-test('active: at least five rigs by day 7', () => {
-  assert.ok(runs.active.metrics['rigs.count'] >= 5, `rigs.count = ${runs.active.metrics['rigs.count']}`);
+// The rack provides three rig slots and there is one rack tier, so three rigs is the room full.
+test('active: owns three rigs (the rack is full) by day 7', () => {
+  assert.equal(runs.active.metrics['rigs.count'], 3);
+  assert.equal(runs.active.metrics['slots.rigFree'], 0);
 });
 
 // Exact fixture. Credits are rounded to 6 significant digits so the fixture is readable and
@@ -70,9 +76,9 @@ const snapshot = (r) => ({
   'offersLeft.final': r.metrics['offersLeft.final'],
   'firstEvent:rig': sig6(r.metrics['firstEvent:rig']),
 });
-const FIXTURE = new URL('./fixtures/v2-expected.json', import.meta.url);
+const FIXTURE = new URL('./fixtures/starter-expected.json', import.meta.url);
 
-test('v2 preset matches fixtures/v2-expected.json (UPDATE_FIXTURE=1 to regenerate)', () => {
+test('the default preset matches fixtures/starter-expected.json (UPDATE_FIXTURE=1 to regenerate)', () => {
   const actual = Object.fromEntries(Object.entries(runs).map(([id, r]) => [id, snapshot(r)]));
   if (process.env.UPDATE_FIXTURE === '1') writeFileSync(FIXTURE, JSON.stringify(actual, null, 2) + '\n');
   assert.ok(existsSync(FIXTURE), 'fixture missing: run UPDATE_FIXTURE=1 npm test');

@@ -1,17 +1,18 @@
 # Pacing fixture
 
-`v2-expected.json` locks the behaviour of the full default module set against the default preset
-(the first entry in `ui/manifest.json`, currently `presets/v2-2026-10-27.json`; the tests read it
+`starter-expected.json` locks the behaviour of the full default module set against the default preset
+(the first entry in `ui/manifest.json`, currently `presets/starter-2026-10-28.json`; the tests read it
 through `test/default-preset.mjs`) for both profiles over 7 days. `test/pacing.test.mjs` checks it in
-two layers.
+two layers. `starter-base.mjs` in this folder is something else: the hand-written schema-2 config the
+unit tests build states from (`base()`), small and complete, distinct from the generated pacing fixture.
 
 ## Layer 1: coarse facts
 
 Hand-stated in the test and expected to survive ordinary tuning. For both profiles: the shop never
 hits its buy cap, the first job level-up lands within 90 s of active play, the first rig lands inside
-the first session (720 s active, 480 s casual), at least one non-offline purchase happens on each of
-days 2–6, and every metric is finite. The active player owns at least five rigs by day 7. A failure
-here means the game's pacing changed in a way worth a look, whatever the intent.
+the first session (720 s active, 480 s casual), at least one purchase happens on each of days 2–6,
+loot has paid out by day 7 and every metric is finite. The active player owns three rigs (the rack is
+full) by day 7. A failure here means the game's pacing changed in a way worth a look, whatever the intent.
 
 ## Layer 2: exact fixture
 
@@ -28,26 +29,28 @@ rewrites the fixture from the current run (the test passes in that mode, so look
 committing). A fixture change must be deliberate: commit it alongside the preset or model change that
 caused it and say why in the message. Never regenerate just to make the test green.
 
-## Current baseline (2026-10-27)
+## Current baseline (2026-10-28)
 
-Preset `v2-2026-10-27.json`: the job ladder retune (no level-25 milestone, cost growth `r` 1.20 on
-every job, level cap 50). Purchases now spread across the week instead of running dry on day 3.
+Preset `starter-2026-10-28.json`: the starter home (six jobs with loot texts, one rig per job, a
+one-tier rack with three slots, seven more room classes, loot 2 % × 12 runs). Draft numbers: the
+whole room is bought in the first minutes of day 1 and the week after that is job levels only.
 
-- Active: rack at 81 s, Wi-Fi rig at 91 s, first item (`item:lamp`) at 180 s of day 1; all five
-  reachable rigs by day 3 (wifi, ceo on day 1; dms, bank on day 2; cams on day 3), the room full
-  (2 racks, GPU in the large slots) from day 2. The ladder is unfinished on day 7: wifi, ceo, dms
-  and bank at level 50, cams at 44, sat at 34; `offersLeft.final` is 4 and `purchasesPerDay` is
-  `[98, 156, 79, 36, 17, 10, 6]`. Passive income reaches about $194K/s on day 7.
-- Casual: Wi-Fi rig at 146 s of day 1, one rig a day through day 4 and the fifth on day 6;
-  `offersLeft.final` is 9 and `purchasesPerDay` is `[59, 40, 57, 41, 53, 12, 40]`.
-- Both: `d7-not-done` now passes. The starter target `daily-rig-or-item` (a rig or item placed
-  on each of days 2–6) still fails for both: rigs and items run out early, and from day 4 (active)
-  or day 7 (casual) only job and item levels are bought. Recorded as a baseline finding of the
-  preset, not fixed.
+- Active: first rig (Wi-Fi) at 29.2 s, rack at 24 s of day 1; stream rig at 56 s, phone rig at 124 s,
+  and every class at its last tier by 112 s (18 tiers, 8 classes, the tower included). Rigs per day
+  `[3, 0, 0, 0, 0, 0, 0]`; the rack is full from 124 s, so the kebab, dentist and radio rigs are never
+  offered and passive income plateaus at about $1.09K/s from day 2. `purchasesPerDay` is
+  `[194, 79, 19, 7, 4, 3, 3]`, `offersLeft.final` 2 (dentist at 48, radio at 40; the other four jobs
+  at 50), `loot.earned` about $79.5M (first loot card at 86.4 s), day-7 credits about $23.8M (down
+  from $34.4M on day 6: a radio level costs tens of millions by then). Active play dominates: about
+  $69M a day from taps, bar and loot in 16 minutes against $46.6M offline.
+- Casual: rack at 27.3 s, Wi-Fi rig at 38 s, stream rig at 93 s, phone rig at 186 s, the room complete
+  at 180 s of day 1. Rigs per day `[3, 0, 0, 0, 0, 0, 0]`, `purchasesPerDay` `[148, 86, 13, 28, 6, 4, 4]`,
+  `offersLeft.final` 3 (kebab 48, dentist 38, radio 32), `loot.earned` about $26.9M (first card at
+  124.7 s), day-7 credits about $329K, passive about $931/s.
+- Both: 5 of the 6 targets pass (`first-upgrade`, `first-rig`, `daily-purchase`, `d7-not-done`,
+  `first-loot`). `daily-rig-or-item` (a rig or room upgrade on each of days 2–6) fails for both with
+  actual 0: everything big is bought on day 1. Recorded as a baseline finding of the draft numbers,
+  not fixed. `shop.capHits` is 0 and every metric is finite for both.
 
-## Previous baseline (2026-10-23)
-
-Preset `v2-2026-10-23.json` (milestone at 25, `r` 1.12–1.13, cap 25): active bought the last
-upgrade on day 7 (`offersLeft.final` 0, `purchasesPerDay` `[100, 124, 49, 5, 2, 1, 1]`), casual
-ended with 2 offers left (`[72, 65, 48, 26, 47, 9, 5]`); `d7-not-done` (active) and
-`daily-rig-or-item` (both) failed, 7/10. Kept in git history, not in the fixture.
+Earlier baselines (`v2-2026-10-27`, `v2-2026-10-23`, schema 1) are in git history, last at commit
+`65ac455`.

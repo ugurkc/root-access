@@ -77,16 +77,16 @@ test('a days range past the end of the run is an error, not a silent slice', () 
 test('purchasesPerDay[kinds]:reducer sums the named kinds per day', () => {
   const byKind = {
     rig: [1, 0, 2, 0, 0, 0, 0],
-    item: [0, 1, 0, 0, 0, 3, 0],
+    class: [0, 1, 0, 0, 0, 3, 0],
     level: [9, 9, 9, 9, 9, 9, 9],
   };
   const kinds = { k: fake({ purchasesPerDay: [10, 10, 11, 9, 9, 12, 9], purchasesByKindPerDay: byKind }) };
   const m = (metric, days) => evaluate([{ ...t({ metric, days, op: '==', value: 0 }), profile: 'k' }], kinds)[0].actual;
-  assert.equal(m('purchasesPerDay[rig,item]:sum'), 7);
-  assert.equal(m('purchasesPerDay[rig, item]:min', [1, 3]), 1);
-  assert.equal(m('purchasesPerDay[rig,item]:min', [4, 5]), 0);
-  assert.equal(m('purchasesPerDay[rig,item]:max', [2, 6]), 3);
-  assert.equal(m('purchasesPerDay[rack]:sum'), 0);
+  assert.equal(m('purchasesPerDay[rig,class]:sum'), 7);
+  assert.equal(m('purchasesPerDay[rig, class]:min', [1, 3]), 1);
+  assert.equal(m('purchasesPerDay[rig,class]:min', [4, 5]), 0);
+  assert.equal(m('purchasesPerDay[rig,class]:max', [2, 6]), 3);
+  assert.equal(m('purchasesPerDay[tier]:sum'), 0);
   assert.equal(evaluate([{ ...t({ metric: 'purchasesPerDay[rig]:median' }), profile: 'k' }], kinds)[0].error, 'unknown metric');
 });
 
@@ -98,10 +98,10 @@ test('purchasesPerDay[...] only accepts the known offer kinds, and at least one'
   assert.equal(evaluate([t({ metric: 'purchasesPerDay[rig,items]:sum' })], runs)[0].error, 'unknown kind "items"');
   assert.equal(evaluate([t({ metric: 'purchasesPerDay[]:sum' })], runs)[0].error, 'unknown metric');
   assert.equal(evaluate([t({ metric: 'purchasesPerDay[ ]:sum' })], runs)[0].error, 'unknown metric');
-  const errs = validateTargets([t({ metric: 'purchasesPerDay[rigs]:min' }), t({ id: 'e', metric: 'purchasesPerDay[]:min' }), t({ id: 'ok', metric: 'purchasesPerDay[level,itemLevel,item,rig,rack]:max' })]);
+  const errs = validateTargets([t({ metric: 'purchasesPerDay[rigs]:min' }), t({ id: 'e', metric: 'purchasesPerDay[]:min' }), t({ id: 'ok', metric: 'purchasesPerDay[level,class,tier,rig]:max' })]);
   assert.deepEqual(errs.map((e) => e.path), ['[0].metric', '[1].metric']);
   assert.match(errs[0].message, /unknown kind "rigs"/);
-  assert.match(errs[0].message, /level, itemLevel, item, rig, rack/);
+  assert.match(errs[0].message, /level, class, tier, rig/);
 });
 
 test('summary.<field>:dayN resolves from the summary row', () => {
@@ -163,11 +163,11 @@ test('validateTargets accepts the starter file and rejects malformed targets wit
   assert.deepEqual(validateTargets('not a list'), [{ path: '', message: 'expected an array of targets' }]);
 });
 
-// The starter file against the default preset. This is the 2026-10-27 baseline (job ladder retune:
-// no milestone, r 1.20, cap 50; see test/fixtures/README.md): one target fails, for both profiles,
-// as a known finding and not as a tool bug: `daily-rig-or-item` (rigs and items run out early; from
-// day 4 (active) or day 7 (casual) only job and item levels are bought). `d7-not-done` now passes for
-// both, since the ladder is unfinished on day 7 (active has 4 offers left, casual 9).
+// The starter file against the default preset. This is the 2026-10-28 baseline (starter home preset,
+// draft numbers; see test/fixtures/README.md): one target fails, for both profiles, as a known finding
+// and not as a tool bug: `daily-rig-or-item` (the whole room and all three rigs are bought on day 1;
+// from day 2 only job levels are left). `d7-not-done` passes for both, since the ladder is unfinished
+// on day 7 (active has 2 offers left, casual 3).
 test('seven-day-idle targets against the default preset: all pass except the baseline failures', () => {
   const config = loadDefaultPreset();
   const byProfile = {
@@ -175,7 +175,7 @@ test('seven-day-idle targets against the default preset: all pass except the bas
     casual: run({ config, profile: load('../profiles/casual.json'), days: 7 }),
   };
   const verdicts = evaluate(load('../targets/seven-day-idle.json'), byProfile);
-  assert.equal(verdicts.length, 10);
+  assert.equal(verdicts.length, 12);
   const failed = verdicts.filter((v) => !v.pass).map((v) => `${v.id}/${v.profile}`);
   assert.deepEqual(failed, ['daily-rig-or-item/active', 'daily-rig-or-item/casual']);
   for (const v of verdicts) assert.equal(v.error, undefined, `${v.id}/${v.profile}: ${v.error}`);
@@ -183,4 +183,5 @@ test('seven-day-idle targets against the default preset: all pass except the bas
   assert.ok(byKey['d7-not-done/active'] >= 1 && byKey['d7-not-done/casual'] >= 1);
   assert.ok(byKey['first-rig/active'] <= 480 && byKey['first-rig/casual'] <= 480);
   assert.ok(byKey['daily-purchase/active'] >= 1 && byKey['daily-purchase/casual'] >= 1);
+  assert.ok(byKey['first-loot/active'] <= 600 && byKey['first-loot/casual'] <= 600);
 });

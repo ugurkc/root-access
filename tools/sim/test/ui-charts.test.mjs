@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
 import { seriesFromResult, MARKER_KINDS } from '../ui/charts.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const config = load('../presets/v2-2026-10-23.json');
+const config = loadDefaultPreset();
 const active = load('../profiles/active.json');
 
 const result = {

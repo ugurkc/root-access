@@ -8,24 +8,25 @@ import { taps, tapMoney } from '../model/mods/taps.mjs';
 import { bar, barSpeed } from '../model/mods/bar.mjs';
 import { offline } from '../model/mods/offline.mjs';
 import { base, ctx } from './fixtures/starter-base.mjs';
-const cfg = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
+// The starter fixture: wifi pays 2 per 6 s run, no milestones, bar steps 10 / bonusTaps 15 / speed 0.25.
+const cfg = base();
 const active = JSON.parse(readFileSync(new URL('../profiles/active.json', import.meta.url)));
 const ctx0 = { ...ctx(), policy: active.policy };
 const ctx1 = { ...ctx0, tapsThisTick: 1 };
 // A state as the core hands it to init: the config is set there, not by a module.
 const fresh = (config = cfg) => ({ t: 0, credits: 0, config });
 
-// wifi at L25 running: 150 per 6 s = 25/s, so a tap pays 6.25.
+// wifi at L30 running: 60 per 6 s = 10/s, so a tap pays 2.5.
 function withWifiRunning() {
   const s = fresh(); jobs.init(s, cfg, active); taps.init(s, cfg, active); bar.init(s, cfg, active);
-  s.jobs.byId.wifi.lv = 25; jobs.tick(s, 0, ctx0);
+  s.jobs.byId.wifi.lv = 30; jobs.tick(s, 0, ctx0);
   return s;
 }
 
 test('the tenth tap fills the bar: 15 taps of bonus money, ×1.25 speed, one bar counted', () => {
   const s = withWifiRunning();
   const perTap = tapMoney(s, cfg, ctx1);
-  assert.equal(perTap, 6.25);
+  assert.equal(perTap, 2.5);
   for (let i = 0; i < 9; i++) bar.tick(s, 0.4, ctx1);
   assert.equal(s.credits, 0);
   assert.equal(barSpeed(s, cfg), 1);
@@ -80,7 +81,7 @@ test('an absence clears the speed stack but keeps the partial bar', () => {
   assert.deepEqual(s.bar.boosts, []);
   assert.equal(barSpeed(s, cfg), 1);
   assert.equal(s.bar.steps, 5);
-  assert.equal(s.credits, 15 * 6.25);                       // offline earns nothing here
+  assert.equal(s.credits, 15 * 2.5);                        // offline earns nothing here
 });
 
 test('bar offers nothing and buy is a no-op', () => {
@@ -139,11 +140,11 @@ test('the bar bonus makes day 1 earn more than taps and jobs alone', () => {
 });
 
 test('boosts active at session end do not scale offline earnings', () => {
-  // wifi is capped at level 1 so the shop cannot level it: a run pays exactly 3 and offline earnings
-  // are a known number of whole runs. ceo gets bought from rep but is not rigged, so it earns nothing away.
+  // wifi is capped at level 1 so the shop cannot level it: a run pays exactly 2 and offline earnings
+  // are a known number of whole runs. stream gets bought from rep but is not rigged, so it earns nothing away.
   const capped = structuredClone(cfg); capped.jobs.maxLevel = 1;
   const seen = [];
-  // Rigs do not exist yet (Task 6), so a helper rigs wifi at init and, ticking last in the gap loop,
+  // The rigs module is left out so a helper rigs wifi at init and, ticking last in the gap loop,
   // records what the bar looks like after every module's offline() has run.
   const helper = {
     id: 'helper',
@@ -157,7 +158,7 @@ test('boosts active at session end do not scale offline earnings', () => {
   const r = run({ config: capped, profile: active, days: 2, modules: [taps, bar, jobs, offline, helper] });
   const gaps = r.timeline.filter((e) => e.kind === 'offline');
   assert.equal(gaps.length, 3);
-  assert.equal(gaps[0].earned, 3 * Math.floor(8 * 3600 / 6));
+  assert.equal(gaps[0].earned, 2 * Math.floor(8 * 3600 / 6));
   assert.deepEqual(seen.map((s) => s.boosts), [0, 0, 0]);
   assert.deepEqual(seen.map((s) => s.speedMult), [1, 1, 1]);
 });

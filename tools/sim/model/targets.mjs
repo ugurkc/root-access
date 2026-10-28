@@ -15,6 +15,7 @@
 // resolves to no finite value yields `error: 'no value'`. Every failed-with-error verdict carries
 // `actual: null` so JSON output keeps the key.
 // Plain ES module with no node: imports: it runs in the browser too.
+import { PURCHASE_KINDS } from './core.mjs';
 
 export const OPS = {
   '<=': (a, b) => a <= b,
@@ -30,8 +31,8 @@ const REDUCERS = {
   sum: (xs) => xs.reduce((s, x) => s + x, 0),
 };
 
-// Offer kinds the modules emit (see registry.mjs), in shop order.
-export const KINDS = ['level', 'itemLevel', 'item', 'rig', 'rack'];
+// Offer kinds the modules emit (core.mjs PURCHASE_KINDS), accepted inside purchasesPerDay[...].
+export const KINDS = PURCHASE_KINDS;
 
 const SUMMARY_RE = /^summary\.([A-Za-z_]\w*):day([1-9]\d*)$/;
 const PER_DAY_RE = /^purchasesPerDay(?:\[([^\]]*)\])?:(\w+)$/;

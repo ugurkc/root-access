@@ -33,11 +33,11 @@ test('validate: the preset is ok, exit 0', () => {
 test('validate: a broken config prints path: message lines and exits 1', () => {
   const cfg = JSON.parse(readFileSync(PRESET, 'utf8'));
   cfg.jobs.list[0].cost = -1;
-  delete cfg.racks.holds;
+  delete cfg.offline.capHours;
   const r = cli('validate', '--config', write('broken.json', cfg));
   assert.equal(r.code, 1);
   assert.match(r.out, /^jobs\.list\[0\]\.cost: /m);
-  assert.match(r.out, /^racks\.holds: missing required key$/m);
+  assert.match(r.out, /^offline\.capHours: missing required key$/m);
 });
 
 test('validate: --targets validates a targets file the same way', () => {
@@ -78,8 +78,8 @@ test('run --json: parseable, 7 summary rows per profile, verdicts array, no fina
     assert.equal(p.final, undefined);
   }
   assert.ok(Array.isArray(j.verdicts));
-  assert.equal(j.verdicts.length, 10);
-  // The preset's baseline failure (daily-rig-or-item, 2026-10-27 baseline) makes the exit code 1.
+  assert.equal(j.verdicts.length, 12);
+  // The preset's baseline failure (daily-rig-or-item, 2026-10-28 baseline) makes the exit code 1.
   assert.equal(r.code, 1);
 });
 
@@ -166,7 +166,7 @@ test('--help exits 0 with usage; an unknown command exits 2 with usage', () => {
 });
 
 test('sweep: one row per value, with passes/total and per-profile first rig and offers left', () => {
-  const r = cli('sweep', '--config', PRESET, '--targets', TARGETS, '--param', 'jobs.list[wifi].cost', '--values', '6,12');
+  const r = cli('sweep', '--config', PRESET, '--targets', TARGETS, '--param', 'jobs.list[wifi].cost', '--values', '5,10');
   assert.equal(r.code, 0, r.out + r.err);
   const rows = r.out.trim().split('\n');
   assert.match(rows[0], /jobs\.list\[wifi\]\.cost/);
@@ -174,31 +174,31 @@ test('sweep: one row per value, with passes/total and per-profile first rig and 
   assert.match(rows[0], /firstEvent:rig\/active/);
   assert.match(rows[0], /offersLeft\.final\/casual/);
   assert.equal(rows.length, 3, r.out);
-  // The first row is the preset itself: 8/10 (2026-10-27 baseline, only daily-rig-or-item fails).
-  assert.match(rows[1], /^\s*6\s+8\/10\s/);
-  assert.match(rows[2], /^\s*12\s+\d+\/10\s/);
+  // The first row is the preset itself: 10/12 (2026-10-28 baseline, only daily-rig-or-item fails).
+  assert.match(rows[1], /^\s*5\s+10\/12\s/);
+  assert.match(rows[2], /^\s*10\s+\d+\/12\s/);
 });
 
 test('sweep --json: the raw grid, two params', () => {
-  const r = cli('sweep', '--config', PRESET, '--profile', 'casual', '--days', '2', '--param', 'racks.cost', '--values', '400,800',
+  const r = cli('sweep', '--config', PRESET, '--profile', 'casual', '--days', '2', '--param', 'classes.list[rack].tiers[0].cost', '--values', '60,120',
     '--param2', 'taps.enabled', '--values2', 'true,false', '--json');
   assert.equal(r.code, 0, r.out + r.err);
   const rows = JSON.parse(r.out);
   assert.equal(rows.length, 4);
-  assert.deepEqual(rows[3].values, { 'racks.cost': 800, 'taps.enabled': false });
+  assert.deepEqual(rows[3].values, { 'classes.list[rack].tiers[0].cost': 120, 'taps.enabled': false });
   assert.deepEqual(Object.keys(rows[0].metrics), ['casual']);
 });
 
 test('sweep: --param and --values are required and must have matching pairs', () => {
   assert.equal(cli('sweep', '--config', PRESET, '--values', '1,2').code, 2);
-  assert.equal(cli('sweep', '--config', PRESET, '--param', 'racks.cost').code, 2);
-  assert.equal(cli('sweep', '--config', PRESET, '--param', 'racks.cost', '--values', '1', '--param2', 'taps.rate').code, 2);
-  assert.equal(cli('sweep', '--config', PRESET, '--param2', 'racks.cost', '--values2', '1').code, 2);
-  const r = cli('sweep', '--config', PRESET, '--param', 'racks.nope', '--values', '1');
+  assert.equal(cli('sweep', '--config', PRESET, '--param', 'offline.capHours').code, 2);
+  assert.equal(cli('sweep', '--config', PRESET, '--param', 'offline.capHours', '--values', '1', '--param2', 'taps.rate').code, 2);
+  assert.equal(cli('sweep', '--config', PRESET, '--param2', 'offline.capHours', '--values2', '1').code, 2);
+  const r = cli('sweep', '--config', PRESET, '--param', 'offline.nope', '--values', '1');
   assert.equal(r.code, 1);
   assert.equal(r.out, '');
-  assert.match(r.err, /racks\.nope/);
-  const same = cli('sweep', '--config', PRESET, '--param', 'racks.cost', '--values', '1', '--param2', 'racks.cost', '--values2', '2');
+  assert.match(r.err, /offline\.nope/);
+  const same = cli('sweep', '--config', PRESET, '--param', 'offline.capHours', '--values', '1', '--param2', 'offline.capHours', '--values2', '2');
   assert.equal(same.code, 2);
   assert.match(same.err, /same path/);
 });
@@ -218,12 +218,12 @@ test('convert: --to js writes window.RA_CONFIG that fromJs reads back equal; --t
 
 test('convert: --to js refuses an invalid config; a write failure is a clean error', () => {
   const cfg = JSON.parse(readFileSync(PRESET, 'utf8'));
-  cfg.racks.cost = 0;
+  cfg.rigs.list[0].cost = 0;
   const out = join(tmp, 'never.js');
   const r = cli('convert', '--to', 'js', '--in', write('zero.json', cfg), '--out', out);
   assert.equal(r.code, 1);
   assert.equal(r.out, '');
-  assert.match(r.err, /^racks\.cost: /m);
+  assert.match(r.err, /^rigs\.list\[0\]\.cost: /m);
   assert.throws(() => readFileSync(out));
   const w = cli('convert', '--to', 'js', '--in', PRESET, '--out', join(tmp, 'no-such-dir', 'x.js'));
   assert.equal(w.code, 1);

@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { getPath, setPath, sweep } from '../model/sweep.mjs';
 import { leafNumericPaths, parseValues, paramsFromForm, combinations, showCell } from '../ui/sweep.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
-const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const config = load('../presets/v2-2026-10-23.json');
+const config = loadDefaultPreset();
 
 test('leafNumericPaths: every numeric leaf of the preset, by id, job or index, none for schema/enabled', () => {
   const paths = leafNumericPaths(config);
-  for (const p of ['taps.rate', 'bar.steps', 'jobs.maxLevel', 'jobs.milestones[0]', 'jobs.list[wifi].cost', 'jobs.list[sat].r', 'rigs.list[ceo].cost', 'racks.r', 'items.list[gpu].pay']) {
+  for (const p of ['taps.rate', 'bar.steps', 'jobs.maxLevel', 'jobs.list[wifi].cost', 'jobs.list[radio].r', 'rigs.list[radio].cost',
+    'classes.list[rack].tiers[0].value', 'classes.list[computer].tiers[3].cost', 'classes.list[cat].event.boost', 'loot.chance']) {
     assert.ok(paths.includes(p), `${p} listed`);
   }
   assert.ok(!paths.includes('schema'));
@@ -44,11 +44,12 @@ test('paramsFromForm: one or two params, second pair must be complete and distin
 });
 
 test('combinations: first param outermost, matching the order sweep() emits rows', () => {
-  const params = [{ path: 'jobs.list[wifi].cost', values: [4, 8] }, { path: 'racks.cost', values: [400, 800] }];
+  const RACK = 'classes.list[rack].tiers[0].cost';
+  const params = [{ path: 'jobs.list[wifi].cost', values: [4, 8] }, { path: RACK, values: [60, 120] }];
   const combos = combinations(params);
   assert.deepEqual(combos, [
-    [['jobs.list[wifi].cost', 4], ['racks.cost', 400]], [['jobs.list[wifi].cost', 4], ['racks.cost', 800]],
-    [['jobs.list[wifi].cost', 8], ['racks.cost', 400]], [['jobs.list[wifi].cost', 8], ['racks.cost', 800]],
+    [['jobs.list[wifi].cost', 4], [RACK, 60]], [['jobs.list[wifi].cost', 4], [RACK, 120]],
+    [['jobs.list[wifi].cost', 8], [RACK, 60]], [['jobs.list[wifi].cost', 8], [RACK, 120]],
   ]);
   const rows = sweep({ config, profiles: {}, params, days: 1 });
   assert.deepEqual(rows.map((r) => r.values), combos.map((c) => Object.fromEntries(c)));
@@ -58,7 +59,7 @@ test('combinations: first param outermost, matching the order sweep() emits rows
   const cfg = structuredClone(config);
   for (const [p, v] of combos[3]) setPath(cfg, p, v);
   assert.equal(getPath(cfg, 'jobs.list[wifi].cost'), 8);
-  assert.equal(getPath(cfg, 'racks.cost'), 800);
+  assert.equal(getPath(cfg, RACK), 120);
 });
 
 test('showCell formats like the CLI sweep table', () => {

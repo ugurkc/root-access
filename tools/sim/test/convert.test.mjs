@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { toJs, fromJs, PREFIX } from '../model/convert.mjs';
+import { loadDefaultPreset } from './default-preset.mjs';
 
-const preset = JSON.parse(readFileSync(new URL('../presets/v2-2026-10-23.json', import.meta.url)));
+const preset = loadDefaultPreset();
 
 test('toJs writes a window.RA_CONFIG assignment', () => {
   const js = toJs(preset);

@@ -5,7 +5,7 @@ import { OPS } from '../model/targets.mjs';
 export const OP_NAMES = Object.keys(OPS);
 
 // Grammar forms offered in the metric datalist next to the keys of the last run.
-export const METRIC_FORMS = ['purchasesPerDay:min', 'purchasesPerDay:max', 'purchasesPerDay:sum', 'purchasesPerDay[rig,item]:min', 'summary.incomePassive:day7', 'summary.credits:day7'];
+export const METRIC_FORMS = ['purchasesPerDay:min', 'purchasesPerDay:max', 'purchasesPerDay:sum', 'purchasesPerDay[rig,class,tier]:min', 'summary.incomePassive:day7', 'summary.credits:day7'];
 
 // A row holds what the inputs hold: strings, with `from`/`to` empty when the target has no days.
 export function targetToRow(target) {
