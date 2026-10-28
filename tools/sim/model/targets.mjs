@@ -40,7 +40,7 @@ const FIRST_EVENT_PREFIX = 'firstEvent:';
 
 const isPerDayMetric = (metric) => typeof metric === 'string' && PER_DAY_RE.test(metric);
 
-// "rig, item" → { kinds } or { error }: 'unknown metric' for an empty list, 'unknown kind "x"' otherwise.
+// "rig, class" → { kinds } or { error }: 'unknown metric' for an empty list, 'unknown kind "x"' otherwise.
 function parseKinds(kindList) {
   const kinds = kindList.split(',').map((k) => k.trim()).filter(Boolean);
   if (kinds.length === 0) return { error: 'unknown metric' };

@@ -3,7 +3,8 @@
 // A path addresses a config value with dotted keys; an array segment takes a selector in brackets:
 //   jobs.list[wifi].cost     the entry whose `id` is "wifi" (or whose `job` is, for rigs)
 //   jobs.list[1].cost        the entry at index 1
-//   racks.cost               a plain key
+//   classes.list[rack].tiers[0].cost   nested lists the same way; `tiers` has no ids, so by index
+//   loot.chance              a plain key
 // Plain ES module with no node: imports: it runs in the browser too.
 import { run } from './core.mjs';
 import { evaluate } from './targets.mjs';

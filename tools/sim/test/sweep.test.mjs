@@ -44,9 +44,11 @@ test('sweep over two values yields two rows with total = targets × profiles', (
       assert.deepEqual(Object.keys(m), ['firstEvent:rig', 'rigs.count', 'credits.final', 'offersLeft.final']);
     }
   }
-  // The first row is the preset itself: 10 of 12 pass, as in the targets test (2026-10-28 baseline).
+  // The first row is the preset itself: 10 of 12 pass, as in the targets test (2026-10-28 baseline),
+  // and its first rig time is the one the pacing fixture pins (6 significant digits, as the fixture rounds).
   assert.equal(rows[0].passes, 10);
-  assert.ok(Math.abs(rows[0].metrics.active['firstEvent:rig'] - 29.2) < 1e-9, String(rows[0].metrics.active['firstEvent:rig']));
+  const expected = load('./fixtures/starter-expected.json');
+  assert.equal(Number(rows[0].metrics.active['firstEvent:rig'].toPrecision(6)), expected.active['firstEvent:rig']);
   assert.notEqual(rows[1].metrics.active['credits.final'], rows[0].metrics.active['credits.final']);
   assert.equal(config.jobs.list[0].cost, 5, 'the config passed in is untouched');
 });

@@ -35,8 +35,9 @@ commands
         [--profile <id|path>]... [--days N] [--targets <path>] [--json]
                                     run every value combination; one row per combination with
                                     passes/total, first rig time and offers left per profile.
-                                    Paths: jobs.list[wifi].cost, rigs.list[ceo].cost, racks.cost, items.list[2].pay
-                                    (quote them: zsh and bash expand unquoted brackets)
+                                    Paths: jobs.list[wifi].cost, rigs.list[stream].cost, loot.chance,
+                                    classes.list[rack].tiers[0].cost (tiers by index; quote paths:
+                                    zsh and bash expand unquoted brackets)
   convert --to js --in <config.json> --out <config.js>
   convert --to json --in <config.js> --out <config.json>
                                     between the simulator's JSON and the game's window.RA_CONFIG script.
