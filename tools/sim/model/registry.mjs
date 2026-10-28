@@ -50,7 +50,7 @@
 //
 // Order: taps, bar, jobs, rigs, classes, events, loot, offline.
 // bar must precede jobs: bar.offline() clears the boosts before jobs.offline() prices the gap.
-// loot must follow jobs: it rolls on the job runs that completed this tick.
+// loot must follow jobs: it prices the runs that completed this step.
 import { taps } from './mods/taps.mjs';
 import { bar } from './mods/bar.mjs';
 import { jobs } from './mods/jobs.mjs';

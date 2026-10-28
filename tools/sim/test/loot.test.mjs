@@ -57,6 +57,20 @@ test('a claim that crosses a whole expected drop records one loot event carrying
   close(events[2].earned, 70 * 0.03 * 25 * 2);
 });
 
+test('a whole drop reached by many small accruals is not missed to float drift', () => {
+  const state = setup();
+  const events = [];
+  const c = { ...ctx(), record: (e) => events.push(e) };
+  let hundredth = null;
+  for (let run = 1; run <= 100; run++) {       // 100 single-run claim cycles: 0.03 × 100 = 3 expected drops
+    jobs.tick(state, 6, c);
+    loot.tick(state, 1, c);
+    if (run === 100) hundredth = events.length;
+  }
+  assert.equal(events.length, 3);
+  assert.equal(hundredth, 3);                   // the third event lands on the 100th run, not later
+});
+
 test('a claim below a whole drop cashes the pool but records no event', () => {
   const state = setup();
   const events = [];

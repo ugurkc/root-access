@@ -7,8 +7,9 @@
 // `loot` timeline event through ctx.record, `{ earned, drops }`: `earned` is the pool cashed at that
 // claim and `drops` the number of cards the player would have seen. It has no cost: it is not a
 // purchase. Claims below a whole drop cash the pool but record nothing, so the metric `loot.earned`
-// is the authoritative total, not the sum of the events. The loot texts (`jobs.list[i].loot`) are
-// the game's; the sim never reads them.
+// is the authoritative total, not the sum of the events. accrue relies on jobs.tick / jobs.offline
+// having already counted this step's runs, so loot must follow jobs in the registry order. The loot
+// texts (`jobs.list[i].loot`) are the game's; the sim never reads them.
 import { runsOf, payFor } from './jobs.mjs';
 
 export const loot = {
@@ -68,8 +69,11 @@ function claim(state, ctx) {
   const earned = l.pending;
   state.credits += earned;
   l.earned += earned;
-  const whole = Math.floor(l.drops);
+  // drops is an accumulated float (0.03 × 100 lands at 2.9999…); the epsilon keeps a whole drop
+  // from being missed by one claim.
+  const whole = Math.floor(l.drops + 1e-9);
   if (whole > l.recorded) {
+    // pending > 0 guarantees a positive entry; ties go to config order.
     const top = Object.entries(l.pendingBy).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
     ctx.record({ kind: 'loot', id: `loot:${top}`, earned, drops: whole - l.recorded });
     l.recorded = whole;
