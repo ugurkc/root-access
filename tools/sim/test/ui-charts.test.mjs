@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { run } from '../model/core.mjs';
-import { seriesFromResult, markerValue, MARKER_KINDS, KIND_STYLE } from '../ui/charts.mjs';
+import { seriesFromResult, markerValue, markerDatasets, MARKER_KINDS, PASSIVE_MARKER_KINDS, KIND_STYLE } from '../ui/charts.mjs';
 import { loadDefaultPreset } from './default-preset.mjs';
 
 const load = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
@@ -55,6 +55,40 @@ test('every marker kind has a point style', () => {
   for (const kind of MARKER_KINDS) assert.equal(typeof KIND_STYLE[kind]?.pointStyle, 'string', kind);
   assert.equal(new Set(MARKER_KINDS.map((k) => KIND_STYLE[k].pointStyle)).size, MARKER_KINDS.length, 'styles are distinct');
   assert.equal(KIND_STYLE.loot.hollow, true, 'loot is not a purchase and looks different');
+});
+
+const palette = { bg: '#000', fg: '#fff' };
+const colourOf = () => '#0ff';
+
+test('markerDatasets: one scatter dataset per kind; loot starts hidden, the purchases do not', () => {
+  const s = seriesFromResult(result, 'active', { day1StartHour: 12 });
+  const sets = markerDatasets([s], MARKER_KINDS, markerValue, colourOf, palette);
+  assert.deepEqual(sets.map((d) => d.label), MARKER_KINDS);
+  assert.deepEqual(sets.map((d) => d.hidden), [false, false, false, true]);
+  const loot = sets.find((d) => d.label === 'loot');
+  assert.deepEqual(loot.data.map((p) => [p.x, p.y, p.drops]), [[(12 * 3600 + 38 * 3600) / 86400, 24, 2]]);
+  assert.equal(loot.backgroundColor, 'transparent');
+  assert.deepEqual(loot.borderColor, ['#0ff'], 'a hollow point is outlined in its profile colour');
+  const rig = sets.find((d) => d.label === 'rig');
+  assert.deepEqual(rig.backgroundColor, ['#0ff']);
+  assert.equal(rig.borderColor, '#000', 'a filled point is outlined in the page background');
+});
+
+test('the passive income chart draws no loot markers', () => {
+  assert.deepEqual(PASSIVE_MARKER_KINDS, ['rig', 'class', 'tier']);
+  const s = seriesFromResult(result, 'active', { day1StartHour: 12 });
+  const sets = markerDatasets([s], PASSIVE_MARKER_KINDS, (m) => m.passive, colourOf, palette);
+  assert.ok(sets.every((d) => d.label !== 'loot'));
+  assert.ok(sets.flatMap((d) => d.data).every((p) => p.kind !== 'loot'));
+  assert.equal(sets.find((d) => d.label === 'class').data[0].y, 6, 'y is the passive line value');
+});
+
+test('a hollow dataset with no points keeps a visible legend border', () => {
+  const sets = markerDatasets([], MARKER_KINDS, markerValue, colourOf, palette);
+  const loot = sets.find((d) => d.label === 'loot');
+  assert.deepEqual(loot.data, []);
+  assert.equal(loot.borderColor, '#fff');
+  assert.deepEqual(sets.find((d) => d.label === 'rig').backgroundColor, []);
 });
 
 test('seriesFromResult: a marker carries the passive line interpolated at its x', () => {

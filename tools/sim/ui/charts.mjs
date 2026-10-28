@@ -5,13 +5,16 @@
 import { fmt } from './format.mjs';
 
 export const MARKER_KINDS = ['rig', 'class', 'tier', 'loot'];
+// Loot is not passive income, so the passive chart draws only the purchases.
+export const PASSIVE_MARKER_KINDS = MARKER_KINDS.filter((k) => k !== 'loot');
 // Chart.js point styles per kind. Purchases are filled shapes; loot is money coming in, so it is a
-// hollow star drawn in the profile's colour.
+// hollow star drawn in the profile's colour, and a run claims loot often enough (hundreds of points
+// over a week) that its dataset starts hidden: the legend shows it and a click reveals it.
 export const KIND_STYLE = {
   rig: { pointStyle: 'triangle' },
   class: { pointStyle: 'rect' },
   tier: { pointStyle: 'rectRot' },
-  loot: { pointStyle: 'star', hollow: true },
+  loot: { pointStyle: 'star', hollow: true, hidden: true },
 };
 const DAY = 86400;
 
@@ -43,6 +46,24 @@ export function seriesFromResult(result, profileId, { day1StartHour = 0 } = {}) 
 
 // The credits a marker stands for: what a loot claim earned, else what a purchase cost.
 export const markerValue = (m) => m.earned ?? m.cost;
+
+// One scatter dataset per marker kind in `kinds`, pure so Node can test the shape. `markerY(m)` is the
+// marker's y on this chart, `colourOf(profile)` its colour; `palette.bg` outlines filled points and
+// `palette.fg` is the border a hollow dataset with no points falls back to, so its legend swatch is
+// still visible (an empty colour array would draw nothing on the dark theme).
+export function markerDatasets(series, kinds, markerY, colourOf, palette) {
+  return kinds.map((kind) => {
+    const { pointStyle, hollow, hidden } = KIND_STYLE[kind];
+    const points = series.flatMap((s) => s.markers.filter((m) => m.kind === kind).map((m) => ({ ...m, y: markerY(m), profile: s.profile })));
+    const colours = points.map((p) => colourOf(p.profile));
+    return {
+      type: 'scatter', label: kind, data: points, pointStyle, radius: hollow ? 7 : 6, hoverRadius: 8, order: 1, hidden: hidden === true,
+      backgroundColor: hollow ? 'transparent' : colours,
+      borderColor: hollow ? (colours.length ? colours : palette.fg) : palette.bg,
+      borderWidth: hollow ? 2 : 1,
+    };
+  });
+}
 
 // ---------- rendering (browser only) ----------
 
@@ -82,14 +103,14 @@ export function renderCharts(host, series) {
   if (!theme) readTheme();
   const colourOf = (profile) => theme.profiles[series.findIndex((s) => s.profile === profile) % theme.profiles.length];
   host.append(
-    chart(host, 'credits', series, (s) => s.credits, markerValue, colourOf),
-    chart(host, 'passive income $/s', series, (s) => s.passive, (m) => m.passive, colourOf),
+    chart(host, 'credits', series, (s) => s.credits, MARKER_KINDS, markerValue, colourOf),
+    chart(host, 'passive income $/s', series, (s) => s.passive, PASSIVE_MARKER_KINDS, (m) => m.passive, colourOf),
   );
 }
 
 const isPowerOfTen = (v) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
 
-function chart(host, title, series, pick, markerY, colourOf) {
+function chart(host, title, series, pick, kinds, markerY, colourOf) {
   const wrap = document.createElement('div');
   wrap.className = 'chart';
   const canvas = document.createElement('canvas');
@@ -100,15 +121,7 @@ function chart(host, title, series, pick, markerY, colourOf) {
     type: 'line', label: s.profile, data: pick(s), borderColor: colourOf(s.profile), backgroundColor: colourOf(s.profile),
     borderWidth: 2, pointRadius: 0, pointHitRadius: 6, pointStyle: 'line', tension: 0, order: 2,
   }));
-  for (const kind of MARKER_KINDS) {
-    const { pointStyle, hollow } = KIND_STYLE[kind];
-    const points = series.flatMap((s) => s.markers.filter((m) => m.kind === kind).map((m) => ({ ...m, y: markerY(m), profile: s.profile })));
-    const colours = points.map((p) => colourOf(p.profile));
-    datasets.push({
-      type: 'scatter', label: kind, data: points, pointStyle, radius: hollow ? 7 : 6, hoverRadius: 8, order: 1,
-      backgroundColor: hollow ? 'transparent' : colours, borderColor: hollow ? colours : theme.bg, borderWidth: hollow ? 2 : 1,
-    });
-  }
+  datasets.push(...markerDatasets(series, kinds, markerY, colourOf, theme));
   const c = new globalThis.Chart(canvas, {
     data: { datasets },
     options: {

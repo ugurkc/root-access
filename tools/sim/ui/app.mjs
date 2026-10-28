@@ -176,7 +176,10 @@ function control(path, f) {
     input.value = Number.isNaN(value) ? '' : displayValue(f.shape, value);
   } else if (isRecordList(f.shape)) {
     // A nested table (a class's tiers) is one JSON cell; the validator reports each bad field in it.
-    input = el('input', { type: 'text', class: 'cell-json', spellcheck: 'false', placeholder: '[{"name": "…", "cost": 1, …}]' });
+    input = el('input', {
+      type: 'text', class: 'cell-json', spellcheck: 'false', placeholder: '[{"name": "…", "cost": 1, …}]',
+      title: 'JSON array of tiers; text that is not a JSON array clears the field',
+    });
     input.value = displayValue(f.shape, value);
   } else {
     input = el('input', { type: 'text', placeholder: f.kind === 'list' ? 'a, b, c' : '' });
