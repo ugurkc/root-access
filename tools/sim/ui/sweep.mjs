@@ -66,5 +66,10 @@ export function combinations(params) {
   return params.reduce((acc, p) => acc.flatMap((prefix) => p.values.map((v) => [...prefix, [p.path, v]])), [[]]);
 }
 
-// A sweep row's cell text like the CLI prints it: '-' for a missing value, one decimal for fractions.
-export const showCell = (v) => (v === null || v === undefined ? '-' : typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(1) : String(v));
+// A sweep row's cell text, shared with the CLI: '-' for a missing value; small fractions (a chance such
+// as 0.02) keep 4 significant digits, larger ones (a time in seconds) one decimal.
+export const showCell = (v) => {
+  if (v === null || v === undefined) return '-';
+  if (typeof v !== 'number' || Number.isInteger(v)) return String(v);
+  return Math.abs(v) < 10 ? String(Number(v.toPrecision(4))) : v.toFixed(1);
+};

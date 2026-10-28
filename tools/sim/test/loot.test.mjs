@@ -12,7 +12,7 @@ const setup = () => {
   return state;
 };
 
-test('each completed run adds chance × payRuns × pay to pending loot, cashed on the next active tick', () => {
+test('each completed run adds chance × payRuns × pay to pending loot, cashed by the loot step of the same tick', () => {
   const state = setup();
   const c = ctx();
   jobs.tick(state, 6, c);                       // one wifi run, pays 2
@@ -93,13 +93,17 @@ test('pending loot is valued at the pay when the run completed, not when it is c
   close(state.credits - afterGap, 150);         // not 300
 });
 
-test('with the loot block disabled nothing is added', () => {
+test('with the loot block disabled a run has no loot metrics and no loot events', () => {
   const cfg = base(); cfg.loot.enabled = false;
-  const state = { credits: 0, t: 0, config: cfg };
-  jobs.init(state, cfg);                        // loot skipped, as the core would
-  jobs.buy(state, 'job:wifi:lv'); setRigged(state, 'wifi', 'Script');
-  jobs.tick(state, 6, ctx());
-  assert.equal(state.credits, 2);
+  const profile = {
+    sessions: { day1: { hour: 20, minutes: 12, tps: 2.5 }, later: [{ hour: 21, minutes: 8, tps: 2.5 }] },
+    policy: { saveForBigWithinMinutes: 30, bigValueRatio: 1.5, buyRigsWhenAffordable: true, restartManualJobs: true },
+  };
+  const r = run({ config: cfg, profile, days: 2 });
+  assert.ok(!('loot.earned' in r.metrics));
+  assert.ok(!('firstEvent:loot' in r.metrics));
+  assert.equal(r.timeline.filter((e) => e.kind === 'loot').length, 0);
+  assert.ok(r.metrics['credits.final'] > 0);
 });
 
 test('a full run earns loot, times its first drop, and keeps loot events out of the purchase counts', () => {

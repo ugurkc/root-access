@@ -2,7 +2,8 @@
 // A shape is num | pos | atLeast(n) | nonNegInt | prob | bool | str | enumOf([...]) | list(shape) | record(required, optional).
 // `pos` is a finite number > 0: durations, prices and growth factors that would divide by or loop on zero.
 // `atLeast(n)` is a finite number ≥ n: multipliers (≥ 1) and amounts that may be zero but not negative.
-// `nonNegInt` is an integer ≥ 0: slot counts.
+// `nonNegInt` is an integer ≥ 0: slot counts. No SHAPES entry uses it today; kept for future slot-count
+// fields (the editor still handles it).
 // `prob` is a finite number in [0, 1]: chances rolled per run.
 // Blocks: schema, taps, bar, jobs, rigs, classes, events, loot, offline. Rig slots come from a class
 // with effect `rigSlots` (a purchasable rack), whose tier values are slot counts.
@@ -152,7 +153,7 @@ function checkClassTiers(cfg, errs) {
   });
 }
 
-// A `rigSlots` class adds its tier value to the room's rig slots, so the value must be a whole count.
+// A `rigSlots` class adds its tier value to the rig slots, so the value must be a whole count.
 // Guarded per entry: anything that is not a record / array / number is already a shape error.
 function checkRigSlotTiers(cfg, errs) {
   if (!Array.isArray(cfg.classes?.list)) return;

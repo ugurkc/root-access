@@ -51,8 +51,9 @@ Rules the blocks encode:
 - **Rack.** A rig needs a free rig slot and only a `rigSlots` class provides them (the preset's
   `rack`: one tier, 3 slots). With the classes block off, no rig can ever be bought.
 - **Loot.** Every completed run (active or offline) adds the expectation `chance × payRuns × pay at
-  drop time` to a pending pool and `chance` to an expected drop count. The pool is cashed on the next
-  active tick (the player taps the card), so loot from a gap lands at the start of the next session.
+  drop time` to a pending pool and `chance` to an expected drop count. The pool is cashed by the loot step
+  of the same tick (accrue, then claim: the player taps the card), so only loot from a gap waits, until
+  the first tick of the next session.
   A claim that crosses at least one whole expected drop records one `loot` timeline event (one per
   claim, not per drop) with `earned`, the pool cashed at that claim, and `drops`, the whole drops since
   the last event; a claim below a whole drop cashes the pool but records nothing, so the metric

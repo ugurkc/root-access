@@ -18,6 +18,7 @@ import { evaluate, validateTargets } from './model/targets.mjs';
 import { sweep } from './model/sweep.mjs';
 import { toJs, fromJs } from './model/convert.mjs';
 import { fmt } from './ui/format.mjs';
+import { showCell } from './ui/sweep.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const DEFAULT_PROFILES = ['active', 'casual'];
@@ -209,12 +210,6 @@ function sweepParams(values) {
   return params;
 }
 
-// Small fractions (a chance such as 0.02) keep 4 significant digits; larger ones (a time in seconds) one decimal.
-const showCell = (v) => {
-  if (v === null || v === undefined) return '-';
-  if (typeof v !== 'number' || Number.isInteger(v)) return String(v);
-  return Math.abs(v) < 10 ? String(Number(v.toPrecision(4))) : v.toFixed(1);
-};
 
 function cmdSweep(args) {
   const { values } = parseArgs({ args, options: {

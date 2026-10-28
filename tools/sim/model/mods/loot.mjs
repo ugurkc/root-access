@@ -2,8 +2,8 @@
 // `loot.chance`, worth `loot.payRuns` runs of that job's pay at the moment of the drop. Modelled as
 // the expectation, not the dice: every new run (read through jobs.mjs `runsOf`) adds
 // chance × payRuns × pay to a pending pool and `chance` to an expected drop count. The pool is cashed
-// on the next active tick (the player taps the card), so loot dropped while away lands at the start
-// of the next session. A claim that brings the expected drop count past a whole number records one
+// by the loot step of the same tick (accrue, then claim: the player taps the card), so only loot
+// dropped while away waits, until the first tick of the next session. A claim that brings the expected drop count past a whole number records one
 // `loot` timeline event through ctx.record, `{ earned, drops }`: `earned` is the pool cashed at that
 // claim and `drops` the number of cards the player would have seen. It has no cost: it is not a
 // purchase. Claims below a whole drop cash the pool but record nothing, so the metric `loot.earned`

@@ -6,6 +6,14 @@ import { loadDefaultPreset } from './default-preset.mjs';
 
 const config = loadDefaultPreset();
 
+test('showCell: a chance keeps its digits, a time keeps one decimal, a gap is a dash', () => {
+  assert.equal(showCell(0.02), '0.02');
+  assert.equal(showCell(29.2), '29.2');
+  assert.equal(showCell(33.3333), '33.3');
+  assert.equal(showCell(3), '3');
+  assert.equal(showCell(null), '-');
+});
+
 test('leafNumericPaths: every numeric leaf of the preset, by id, job or index, none for schema/enabled', () => {
   const paths = leafNumericPaths(config);
   for (const p of ['taps.rate', 'bar.steps', 'jobs.maxLevel', 'jobs.list[wifi].cost', 'jobs.list[radio].r', 'rigs.list[radio].cost',
