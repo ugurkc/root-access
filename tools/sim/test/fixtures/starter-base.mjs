@@ -1,5 +1,9 @@
-// Shared schema-2 fixture for the starter home tests: a small complete config and a neutral ctx.
-// `base()` validates clean; tests mutate a copy. Later tasks (rigs, classes, jobs, loot) reuse it.
+// Shared schema-2 fixture for the starter home tests: a small complete config, a neutral ctx and a
+// float comparison. `base()` validates clean; tests mutate a copy. Later tasks (rigs, classes, jobs,
+// loot) reuse it.
+import assert from 'node:assert/strict';
+
+export const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 
 export const tier = (over = {}) => ({ name: 'Simple desk', cost: 30, value: 1.25, comfort: 2, ...over });
 

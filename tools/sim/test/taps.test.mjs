@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { base, ctx } from './fixtures/starter-base.mjs';
+import { base, ctx, close } from './fixtures/starter-base.mjs';
 import { taps } from '../model/mods/taps.mjs';
 import { jobs, runningIncome, payFor } from '../model/mods/jobs.mjs';
 
-const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 const restart = { ...ctx(), policy: { restartManualJobs: true } };
 
-// jobs, then taps, as the registry orders them; wifi bought to `lv` and started with no work done yet.
+// jobs first so wifi is bought to `lv` and running (no work done yet) before taps init.
 const withWifiRunning = (config, lv) => {
   const state = { credits: 0, t: 0, config };
   jobs.init(state, config);

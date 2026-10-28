@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { base, ctx } from './fixtures/starter-base.mjs';
+import { base, ctx, close } from './fixtures/starter-base.mjs';
 import { classes, ownedClasses, totalComfort, rigSlots } from '../model/mods/classes.mjs';
 import { eventsComfort } from '../model/mods/events.mjs';
 import { jobs, runningIncome } from '../model/mods/jobs.mjs';
 import { taps, tapMoney } from '../model/mods/taps.mjs';
 import { bar } from '../model/mods/bar.mjs';
 
-const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 
 test('every class is offered at its first tier; buying moves it up one tier at that tier\'s cost', () => {
   const state = { credits: 0, config: base() };
