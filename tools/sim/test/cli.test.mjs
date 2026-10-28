@@ -179,6 +179,15 @@ test('sweep: one row per value, with passes/total and per-profile first rig and 
   assert.match(rows[2], /^\s*10\s+\d+\/12\s/);
 });
 
+test('sweep: a small fractional value such as a chance prints as given, not rounded to one decimal', () => {
+  const r = cli('sweep', '--config', PRESET, '--param', 'loot.chance', '--values', '0.02,0.03');
+  assert.equal(r.code, 0, r.out + r.err);
+  const rows = r.out.trim().split('\n');
+  assert.equal(rows.length, 3, r.out);
+  assert.match(rows[1], /^\s*0\.02\s/);
+  assert.match(rows[2], /^\s*0\.03\s/);
+});
+
 test('sweep --json: the raw grid, two params', () => {
   const r = cli('sweep', '--config', PRESET, '--profile', 'casual', '--days', '2', '--param', 'classes.list[rack].tiers[0].cost', '--values', '60,120',
     '--param2', 'taps.enabled', '--values2', 'true,false', '--json');

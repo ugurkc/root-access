@@ -53,9 +53,10 @@ Rules the blocks encode:
 - **Loot.** Every completed run (active or offline) adds the expectation `chance × payRuns × pay at
   drop time` to a pending pool and `chance` to an expected drop count. The pool is cashed on the next
   active tick (the player taps the card), so loot from a gap lands at the start of the next session.
-  Each claim that carries the expected count past a whole number records one `loot` timeline event
-  `{ earned, drops }`; smaller claims cash the pool silently, so the metric `loot.earned` is the
-  total, not the sum of the events.
+  A claim that crosses at least one whole expected drop records one `loot` timeline event (one per
+  claim, not per drop) with `earned`, the pool cashed at that claim, and `drops`, the whole drops since
+  the last event; a claim below a whole drop cashes the pool but records nothing, so the metric
+  `loot.earned` is the authoritative total, not the sum of the events' `earned`.
 - **Loot texts.** A job may carry `loot: [texts]`; the game shows them, the sim ignores them.
 
 `validateConfig(cfg)` returns `[{ path, message }]`: unknown or missing keys, wrong types, NaN,
@@ -124,8 +125,9 @@ active play. The `purchases` list above is a hand-picked selection; the real day
 `level`, `class` (a class's first tier), `tier` (a later one) and `rig`; a purchase also carries a
 numeric `cost` and is what `summary[].purchases`, `purchasesPerDay` and `purchasesByKindPerDay`
 count. The shop saves for the big kinds `rig`, `class`, `tier`. Two more kinds are not purchases:
-`loot` (`{ earned, drops }`, recorded by the loot module) and `offline` (`{ seconds, earned }`, one per
-gap). `firstEvent:<kind>` exists for every kind except `offline`, so `firstEvent:loot` works.
+`loot` (`{ earned, drops }`, one per claim that crosses a whole expected drop; `earned` is the pool
+cashed at that claim, `drops` the whole drops since the last event) and `offline` (`{ seconds, earned }`,
+one per gap). `firstEvent:<kind>` exists for every kind except `offline`, so `firstEvent:loot` works.
 
 **Multipliers.** `ctx` carries `payMult, speedMult, comfortMult, rigSpeedMult, tapMult, barMult,
 tapAdvanceMult`, the product of every module's `multipliers()`, rebuilt each tick:
@@ -154,7 +156,8 @@ payout is `bonusTaps × barMult × tap money`, so it inherits both.
 - classes: `classes.owned`, `classes.tiers` (owned tiers summed), `classes.<id>.tier`, `comfort.total`
   (owned tiers' comfort, events excluded), `slots.rig`
 - events: `events.comfortAvg`
-- loot: `loot.pending`, `loot.earned`, `loot.drops` (expected cards)
+- loot: `loot.pending`, `loot.earned` (the authoritative total; claims below a whole drop record no
+  event), `loot.drops` (expected cards, a float)
 - offline: `offline.gaps`, `offline.cappedCount`, `offline.cappedSeconds`
 - core: `firstEvent:<kind>`, `purchasesPerDay`, `purchasesByKindPerDay`, `credits.final`,
   `offersLeft.final`, `shop.capHits`

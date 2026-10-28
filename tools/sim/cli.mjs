@@ -209,7 +209,12 @@ function sweepParams(values) {
   return params;
 }
 
-const showCell = (v) => (v === null || v === undefined ? '-' : typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(1) : String(v));
+// Small fractions (a chance such as 0.02) keep 4 significant digits; larger ones (a time in seconds) one decimal.
+const showCell = (v) => {
+  if (v === null || v === undefined) return '-';
+  if (typeof v !== 'number' || Number.isInteger(v)) return String(v);
+  return Math.abs(v) < 10 ? String(Number(v.toPrecision(4))) : v.toFixed(1);
+};
 
 function cmdSweep(args) {
   const { values } = parseArgs({ args, options: {
